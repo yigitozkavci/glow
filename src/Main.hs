@@ -1,6 +1,7 @@
 module Main where
 
 import Parser
+import Codegen
 
 import Control.Monad.Trans
 import System.Console.Haskeline
@@ -10,7 +11,7 @@ process line = do
   let res = parseToplevel line
   case res of
     Left err -> print err
-    Right ex -> mapM_ print ex
+    Right ex -> putStrLn . resultStr $ codegen ex
 
 main :: IO ()
 main = runInputT defaultSettings loop

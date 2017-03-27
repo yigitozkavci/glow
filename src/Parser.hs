@@ -41,7 +41,8 @@ function :: Parser Expr
 function = do
   reserved "def"
   name <- identifier
-  args <- parens $ many variable
+  args <- parens $ commaSep variable
+  reserved "="
   body <- expr
   return $ Function name args body
 
