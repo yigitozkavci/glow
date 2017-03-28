@@ -10,7 +10,7 @@ type State s = StateT s Identity
 data Codegen = Codegen {
   varCount  :: Int,
   resultStr :: String
-}
+} deriving Show
 
 type CodegenState = State Codegen Int
 
@@ -24,12 +24,10 @@ initCodegen = Codegen
   , resultStr = "init -> "
   }
 
-initState :: CodegenState
-initState = state $ const (0, initCodegen)
-
 {- Returns a state computation with given expression array -}
 computeExpr :: [Expr] -> CodegenState
-computeExpr = foldr ((>>) . genSingleExpr) initState
+computeExpr [x] = genSingleExpr x
+computeExpr (x:xs) = genSingleExpr x >> computeExpr xs
 
 codegen :: [Expr] -> Codegen
 codegen xs = execState (computeExpr xs) initCodegen
@@ -39,7 +37,7 @@ genSingleExpr expr =
   case expr of
     (Function name args ret) ->
       genFunction name args ret
-    _ -> return 0
+    _ -> state $ \s -> (0, s { resultStr = resultStr s ++ "other!" })
 
 genFunction :: Name -> [Expr] -> Expr -> CodegenState
 genFunction _ _ _ = state $ \s ->
