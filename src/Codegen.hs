@@ -106,11 +106,6 @@ emptyState = modify $ \s -> s { resultStr = resultStr s ++ "[!] non-implemented 
 emptyState' :: Expr -> CodegenState ()
 emptyState' expr = modify $ \s -> s { resultStr = resultStr s ++ "[!] non-implemented expression:\n[!] " ++ show expr ++ "\n" }
 
-genFunctionDecl :: Name -> Int -> CodegenState ()
-genFunctionDecl name argCount = modify $ \s ->
-  s { resultStr = resultStr s ++ "define i32 @" ++ name ++ "(" ++ argTypes ++ ") {\n" }
-  where argTypes = sepWithCommas $ replicate argCount "i32"
-
 genFunction :: Name -> [Expr] -> Expr -> CodegenState ()
 genFunction name args ret = do
   genFunctionDecl name (length args)
@@ -118,6 +113,11 @@ genFunction name args ret = do
   genFuncLabelVar
   genSingleExpr ret
   genFuncEnd
+
+genFunctionDecl :: Name -> Int -> CodegenState ()
+genFunctionDecl name argCount = modify $ \s ->
+  s { resultStr = resultStr s ++ "define i32 @" ++ name ++ "(" ++ argTypes ++ ") {\n" }
+  where argTypes = sepWithCommas $ replicate argCount "i32"
 
 genFuncLabelVar :: CodegenState ()
 genFuncLabelVar = modify $ \s ->
@@ -134,7 +134,9 @@ genFuncArgVars (x:xs) = genFuncArgVar x >> genFuncArgVars xs
 
 genFuncEnd :: CodegenState ()
 genFuncEnd = modify $ \s ->
-  s { resultStr = resultStr s ++ "}\n\n" }
+  s { resultStr = resultStr s ++ "ret i32 %" ++ show (varIndex s - 1) ++ "\n}\n\n"
+    , varIndex = 0
+    }
 
 sepWithCommas :: [String] -> String
 sepWithCommas [x] = x
