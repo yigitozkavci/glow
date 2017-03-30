@@ -4,15 +4,18 @@ import Syntax
 import Lexer
 import Control.Monad.Identity
 import Control.Monad.State hiding (State)
+import qualified Data.Map.Strict as Map
 
 type State s = StateT s Identity
-
-data Codegen = Codegen {
-  varCount  :: Int,
-  resultStr :: String
-} deriving Show
-
+type LookupMap = Map.Map String Int
 type CodegenState = State Codegen Int
+
+data Codegen = Codegen
+  { varCount  :: Int
+  , resultStr :: String
+  , lookupTable :: LookupMap
+  , varIndex :: Int
+  } deriving Show
 
 parseFunction :: CodegenState
 parseFunction = state $ \s ->
@@ -21,7 +24,9 @@ parseFunction = state $ \s ->
 initCodegen :: Codegen
 initCodegen = Codegen
   { varCount = 0
-  , resultStr = "init -> "
+  , resultStr = ""
+  , lookupTable = Map.empty
+  , varIndex = 0
   }
 
 {- Returns a state computation with given expression array -}
@@ -39,9 +44,31 @@ genSingleExpr expr =
       genFunction name args ret
     _ -> state $ \s -> (0, s { resultStr = resultStr s ++ "other!" })
 
+genFunctionDecl :: Name -> Int -> CodegenState
+genFunctionDecl name argCount = state $ \s ->
+  (0, s { resultStr = resultStr s ++ "def " ++ name ++ "(" ++ argTypes ++ ") {\n" })
+  where argTypes = sepWithCommas $ replicate argCount "i32"
+
 genFunction :: Name -> [Expr] -> Expr -> CodegenState
-genFunction _ _ _ = state $ \s ->
-  (0, s { resultStr = resultStr s ++ "function!" })
+genFunction name args ret = do
+  genFunctionDecl name (length args)
+  genFuncArgVars args
+  -- genFunctionBody
+
+genFuncArgVar :: String -> CodegenState
+genFuncArgVar arg = state $ \s ->
+  (0, s { lookupTable = Map.insert arg (varIndex s) (lookupTable s)
+        , varIndex = varIndex s + 1
+        }
+  )
+
+genFuncArgVars :: [Expr] -> CodegenState
+genFuncArgVars [Var x] = genFuncArgVar x
+genFuncArgVars ((Var x):xs) = genFuncArgVar x >> genFuncArgVars xs
+
+sepWithCommas :: [String] -> String
+sepWithCommas [x] = x
+sepWithCommas (x:xs) = x ++ ", " ++ sepWithCommas xs
 
 insideFunction :: [Expr] -> Expr -> String
 insideFunction args expr =
