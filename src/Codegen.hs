@@ -147,7 +147,6 @@ insideFunction args expr =
   ""
 
 argSep :: [Expr] -> String
-argSep [] = ""
 argSep [last] = "i32"
 argSep (x:xs) = "i32, " ++ argSep xs
 
