@@ -37,10 +37,6 @@ computeExpr (x:xs) = genSingleExpr x >> computeExpr xs
 codegen :: [Expr] -> Codegen
 codegen xs = execState (computeExpr xs) initCodegen
 
--- varToStrings :: [Expr] -> [String]
--- varToStrings (Var x:xs) = x : varToStrings xs
--- varToStrings _ = error "Non-variable used as function argument"
-
 genSingleExpr :: Expr -> CodegenState ()
 genSingleExpr expr =
   case expr of
