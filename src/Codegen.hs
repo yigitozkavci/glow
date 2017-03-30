@@ -5,6 +5,7 @@ import Lexer
 import Control.Monad.Identity
 import Control.Monad.State hiding (State)
 import qualified Data.Map.Strict as Map
+import Data.Maybe
 
 type State s = StateT s Identity
 type LookupMap = Map.Map String Int
@@ -45,36 +46,58 @@ genSingleExpr expr =
   case expr of
     (Function name args ret) ->
       genFunction name args ret
-    -- (BinOp op left right) ->
-      -- leftVal <- ensureVar left
-      -- rightVal <- ensureVar right
-      -- case op of
-      --   Plus -> genPlusExpr left right
-      --   Minus -> genMinusExpr left right
-      --   Times -> genTimesExpr left right
-      --   Divide -> genDivideExpr left right
+    (BinOp op left right) -> do
+      leftVal <- ensureVar left -- It might not be a Var though.
+      rightVal <- ensureVar right
+      case op of
+        Plus -> genPlusExpr leftVal rightVal
+        Minus -> genMinusExpr leftVal rightVal
+        Times -> genTimesExpr leftVal rightVal
+        Divide -> genDivideExpr leftVal rightVal
     _ -> emptyState' expr
 
--- ensureFloat :: Expr -> CodegenState
--- ensureFloat expr =
---   case expr of
---     (Float num) -> return num
---     (Var a) -> state $ \s ->
+ensureVar :: Expr -> CodegenState Int
+ensureVar expr =
+  case expr of
+    (Var a) -> state $ \s ->
+      let var = Map.lookup a (lookupTable s) in
+      case var of
+        Just a -> (a, s)
+        Nothing -> error $ "Variable " ++ a ++ " is not defined!"
+    (Float num) -> state $ \s ->
+      (varIndex s, s { resultStr = resultStr s ++ defFloat (varIndex s) num
+                     , varIndex = varIndex s + 1
+                     })
+
+defFloat :: Int -> Double -> String
+defFloat a b = "%" ++ show a ++ " = add i32 0, " ++ show b ++ "\n"
 
 genOpExpr :: Expr -> Expr -> CodegenState ()
 genOpExpr (Float a) (Float b) = emptyState
--- genPlusExpr :: Expr -> Expr -> CodegenState
--- genPlusExpr (Var a) (Var b) = state $ \s ->
---   (0.0, s { resultStr = resultStr s ++ "%" ++ show (varIndex s) ++ " = add i32 %" ++ a ++ ", %" ++ b ++ "\n" })
 
--- genMinusExpr :: Expr -> Expr -> CodegenState
--- genMinusExpr (Var a) (Var b) = emptyState
+genPlusExpr :: Int -> Int -> CodegenState ()
+genPlusExpr a b = modify $ \s ->
+  s { resultStr = resultStr s ++ "%" ++ show (varIndex s) ++ " = add i32 %" ++ show a ++ ", %" ++ show b ++ "\n"
+    , varIndex = varIndex s + 1 
+    }
 
--- genTimesExpr :: Expr -> Expr -> CodegenState
--- genTimesExpr (Var a) (Var b) = emptyState
+genMinusExpr :: Int -> Int -> CodegenState ()
+genMinusExpr a b = modify $ \s ->
+  s { resultStr = resultStr s ++ "%" ++ show (varIndex s) ++ " = add i32 %" ++ show a ++ ", %" ++ show b ++ "\n"
+    , varIndex = varIndex s + 1 
+    }
 
--- genDivideExpr :: Expr -> Expr -> CodegenState
--- genDivideExpr (Var a) (Var b) = emptyState
+genTimesExpr :: Int -> Int -> CodegenState ()
+genTimesExpr a b = modify $ \s ->
+  s { resultStr = resultStr s ++ "%" ++ show (varIndex s) ++ " = add i32 %" ++ show a ++ ", %" ++ show b ++ "\n"
+    , varIndex = varIndex s + 1 
+    }
+
+genDivideExpr :: Int -> Int -> CodegenState ()
+genDivideExpr a b = modify $ \s ->
+  s { resultStr = resultStr s ++ "%" ++ show (varIndex s) ++ " = add i32 %" ++ show a ++ ", %" ++ show b ++ "\n"
+    , varIndex = varIndex s + 1 
+    }
 
 -- This is for 'unimplemented' causes only. Should not be shipped into the production
 emptyState :: CodegenState ()
@@ -85,22 +108,27 @@ emptyState' expr = modify $ \s -> s { resultStr = resultStr s ++ "[!] non-implem
 
 genFunctionDecl :: Name -> Int -> CodegenState ()
 genFunctionDecl name argCount = modify $ \s ->
-  s { resultStr = resultStr s ++ "def " ++ name ++ "(" ++ argTypes ++ ") {\n" }
+  s { resultStr = resultStr s ++ "define i32 @" ++ name ++ "(" ++ argTypes ++ ") {\n" }
   where argTypes = sepWithCommas $ replicate argCount "i32"
 
-genFunction :: Name -> [String] -> Expr -> CodegenState ()
+genFunction :: Name -> [Expr] -> Expr -> CodegenState ()
 genFunction name args ret = do
   genFunctionDecl name (length args)
   genFuncArgVars args
+  genFuncLabelVar
   genSingleExpr ret
   genFuncEnd
 
-genFuncArgVar :: String -> CodegenState ()
-genFuncArgVar arg = modify $ \s ->
+genFuncLabelVar :: CodegenState ()
+genFuncLabelVar = modify $ \s ->
+  s { varIndex = varIndex s + 1 } -- Should we record label var?
+
+genFuncArgVar :: Expr -> CodegenState ()
+genFuncArgVar (Var arg) = modify $ \s ->
   s { lookupTable = Map.insert arg (varIndex s) (lookupTable s)
     , varIndex = varIndex s + 1 }
 
-genFuncArgVars :: [String] -> CodegenState ()
+genFuncArgVars :: [Expr] -> CodegenState ()
 genFuncArgVars [x] = genFuncArgVar x
 genFuncArgVars (x:xs) = genFuncArgVar x >> genFuncArgVars xs
 
