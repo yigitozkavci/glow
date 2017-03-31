@@ -18,7 +18,7 @@ data Codegen = Codegen
   , globalLookupTable :: LookupTable
   , localLookupTable :: LookupTable
   , currentScope :: Scope
-  , varIndex :: Int
+  , localVarIndex :: Int
   }
 
 emptyLookupTable :: LookupTable
@@ -34,7 +34,7 @@ initCodegen = Codegen
   , globalLookupTable = Map.empty
   , localLookupTable = Map.empty
   , currentScope = Global
-  , varIndex = 0
+  , localVarIndex = 0
   }
 
 lookup' :: String -> Codegen -> Maybe Int
@@ -79,8 +79,8 @@ ensureVar expr =
         Just a -> (a, s)
         Nothing -> error $ "Variable " ++ a ++ " is not defined!"
     (Float num) -> state $ \s ->
-      (varIndex s, s { resultStr = resultStr s ++ defFloat (varIndex s) num
-                     , varIndex = varIndex s + 1
+      (localVarIndex s, s { resultStr = resultStr s ++ defFloat (localVarIndex s) num
+                     , localVarIndex = localVarIndex s + 1
                      })
 
 defFloat :: Int -> Double -> String
@@ -91,26 +91,26 @@ genOpExpr (Float a) (Float b) = emptyState
 
 genPlusExpr :: Int -> Int -> CodegenState ()
 genPlusExpr a b = modify $ \s ->
-  s { resultStr = resultStr s ++ "%" ++ show (varIndex s) ++ " = add i32 %" ++ show a ++ ", %" ++ show b ++ "\n"
-    , varIndex = varIndex s + 1 
+  s { resultStr = resultStr s ++ "%" ++ show (localVarIndex s) ++ " = add i32 %" ++ show a ++ ", %" ++ show b ++ "\n"
+    , localVarIndex = localVarIndex s + 1
     }
 
 genMinusExpr :: Int -> Int -> CodegenState ()
 genMinusExpr a b = modify $ \s ->
-  s { resultStr = resultStr s ++ "%" ++ show (varIndex s) ++ " = add i32 %" ++ show a ++ ", %" ++ show b ++ "\n"
-    , varIndex = varIndex s + 1 
+  s { resultStr = resultStr s ++ "%" ++ show (localVarIndex s) ++ " = sub i32 %" ++ show a ++ ", %" ++ show b ++ "\n"
+    , localVarIndex = localVarIndex s + 1
     }
 
 genTimesExpr :: Int -> Int -> CodegenState ()
 genTimesExpr a b = modify $ \s ->
-  s { resultStr = resultStr s ++ "%" ++ show (varIndex s) ++ " = add i32 %" ++ show a ++ ", %" ++ show b ++ "\n"
-    , varIndex = varIndex s + 1 
+  s { resultStr = resultStr s ++ "%" ++ show (localVarIndex s) ++ " = mul i32 %" ++ show a ++ ", %" ++ show b ++ "\n"
+    , localVarIndex = localVarIndex s + 1
     }
 
 genDivideExpr :: Int -> Int -> CodegenState ()
 genDivideExpr a b = modify $ \s ->
-  s { resultStr = resultStr s ++ "%" ++ show (varIndex s) ++ " = add i32 %" ++ show a ++ ", %" ++ show b ++ "\n"
-    , varIndex = varIndex s + 1 
+  s { resultStr = resultStr s ++ "%" ++ show (localVarIndex s) ++ " = udiv i32 %" ++ show a ++ ", %" ++ show b ++ "\n"
+    , localVarIndex = localVarIndex s + 1
     }
 
 -- This is for 'unimplemented' causes only. Should not be shipped into the production
@@ -136,12 +136,12 @@ genFunctionDecl name argCount = modify $ \s ->
 
 genFuncLabelVar :: CodegenState ()
 genFuncLabelVar = modify $ \s ->
-  s { varIndex = varIndex s + 1 } -- Should we record label var?
+  s { localVarIndex = localVarIndex s + 1 } -- Should we record label var?
 
 genFuncArgVar :: Expr -> CodegenState ()
 genFuncArgVar (Var arg) = modify $ \s ->
-  s { localLookupTable = Map.insert arg (varIndex s) (localLookupTable s)
-    , varIndex = varIndex s + 1 }
+  s { localLookupTable = Map.insert arg (localVarIndex s) (localLookupTable s)
+    , localVarIndex = localVarIndex s + 1 }
 
 genFuncArgVars :: [Expr] -> CodegenState ()
 genFuncArgVars [x] = genFuncArgVar x
@@ -149,8 +149,8 @@ genFuncArgVars (x:xs) = genFuncArgVar x >> genFuncArgVars xs
 
 genFuncEnd :: CodegenState ()
 genFuncEnd = modify $ \s ->
-  s { resultStr = resultStr s ++ "ret i32 %" ++ show (varIndex s - 1) ++ "\n}\n\n"
-    , varIndex = 0
+  s { resultStr = resultStr s ++ "ret i32 %" ++ show (localVarIndex s - 1) ++ "\n}\n\n"
+    , localVarIndex = 0
     , currentScope = Global
     , localLookupTable = emptyLookupTable
     }
