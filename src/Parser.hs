@@ -53,6 +53,14 @@ extern = do
   args <- parens $ many variable
   return $ Extern name args
 
+varDecl :: Parser Expr
+varDecl = do
+  reserved "var"
+  name <- identifier
+  reserved "="
+  value <- integer
+  return $ VarDecl name (fromInteger value)
+
 call :: Parser Expr
 call = do
   name <- identifier
@@ -65,6 +73,7 @@ factor = try floating
        <|> try extern
        <|> try function
        <|> try call
+       <|> try varDecl
        <|> variable
        <|> parens expr
 

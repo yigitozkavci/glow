@@ -8,6 +8,7 @@ data Expr = Float Double
           | Call Name [Expr]
           | Function Name [Expr] Expr
           | Extern Name [Expr]
+          | VarDecl Name Double
           deriving (Show, Ord, Eq)
 
 data Op = Plus
