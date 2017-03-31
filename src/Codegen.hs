@@ -21,6 +21,9 @@ data Codegen = Codegen
   , varIndex :: Int
   }
 
+emptyLookupTable :: LookupTable
+emptyLookupTable = Map.empty
+
 parseFunction :: CodegenState ()
 parseFunction = modify $ \s -> s { varCount = varCount s + 1 }
 
@@ -125,7 +128,6 @@ genFunction name args ret = do
   genSingleExpr ret
   genFuncEnd
 
--- TODO: Modify the scope when entering into function block
 genFunctionDecl :: Name -> Int -> CodegenState ()
 genFunctionDecl name argCount = modify $ \s ->
   s { resultStr = resultStr s ++ "define i32 @" ++ name ++ "(" ++ argTypes ++ ") {\n"
@@ -150,6 +152,7 @@ genFuncEnd = modify $ \s ->
   s { resultStr = resultStr s ++ "ret i32 %" ++ show (varIndex s - 1) ++ "\n}\n\n"
     , varIndex = 0
     , currentScope = Global
+    , localLookupTable = emptyLookupTable
     }
 
 sepWithCommas :: [String] -> String
