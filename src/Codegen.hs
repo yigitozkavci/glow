@@ -8,15 +8,18 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe
 
 type State s = StateT s Identity
-type LookupMap = Map.Map String Int
+type LookupTable = Map.Map String Int
 type CodegenState a = State Codegen a
 
+data Scope = Global | Local
 data Codegen = Codegen
   { varCount  :: Int
   , resultStr :: String
-  , lookupTable :: LookupMap
+  , globalLookupTable :: LookupTable
+  , localLookupTable :: LookupTable
+  , currentScope :: Scope
   , varIndex :: Int
-  } deriving Show
+  }
 
 parseFunction :: CodegenState ()
 parseFunction = modify $ \s -> s { varCount = varCount s + 1 }
@@ -25,17 +28,25 @@ initCodegen :: Codegen
 initCodegen = Codegen
   { varCount = 0
   , resultStr = ""
-  , lookupTable = Map.empty
+  , globalLookupTable = Map.empty
+  , localLookupTable = Map.empty
+  , currentScope = Global
   , varIndex = 0
   }
 
+lookup' :: String -> Codegen -> Maybe Int
+lookup' key codegen =
+  case currentScope codegen of
+    Global -> Map.lookup key (globalLookupTable codegen)
+    Local -> Map.lookup key (localLookupTable codegen)
+
 {- Returns a state computation with given expression array -}
-computeExpr :: [Expr] -> CodegenState ()
-computeExpr [x] = genSingleExpr x
-computeExpr (x:xs) = genSingleExpr x >> computeExpr xs
+computeExprs :: [Expr] -> CodegenState ()
+computeExprs [x] = genSingleExpr x
+computeExprs (x:xs) = genSingleExpr x >> computeExprs xs
 
 codegen :: [Expr] -> Codegen
-codegen xs = execState (computeExpr xs) initCodegen
+codegen xs = execState (computeExprs xs) initCodegen
 
 genSingleExpr :: Expr -> CodegenState ()
 genSingleExpr expr =
@@ -52,11 +63,15 @@ genSingleExpr expr =
         Divide -> genDivideExpr leftVal rightVal
     _ -> emptyState' expr
 
+{- Ensure that given expression is a variable. In LLVM, we basically need every
+ - argument as variables. If a double is given, we first declare it within the scope
+ - then use it. This method exactly does that.
+ -}
 ensureVar :: Expr -> CodegenState Int
 ensureVar expr =
   case expr of
     (Var a) -> state $ \s ->
-      let var = Map.lookup a (lookupTable s) in
+      let var = lookup' a s in
       case var of
         Just a -> (a, s)
         Nothing -> error $ "Variable " ++ a ++ " is not defined!"
@@ -110,9 +125,11 @@ genFunction name args ret = do
   genSingleExpr ret
   genFuncEnd
 
+-- TODO: Modify the scope when entering into function block
 genFunctionDecl :: Name -> Int -> CodegenState ()
 genFunctionDecl name argCount = modify $ \s ->
-  s { resultStr = resultStr s ++ "define i32 @" ++ name ++ "(" ++ argTypes ++ ") {\n" }
+  s { resultStr = resultStr s ++ "define i32 @" ++ name ++ "(" ++ argTypes ++ ") {\n"
+    , currentScope = Local }
   where argTypes = sepWithCommas $ replicate argCount "i32"
 
 genFuncLabelVar :: CodegenState ()
@@ -121,7 +138,7 @@ genFuncLabelVar = modify $ \s ->
 
 genFuncArgVar :: Expr -> CodegenState ()
 genFuncArgVar (Var arg) = modify $ \s ->
-  s { lookupTable = Map.insert arg (varIndex s) (lookupTable s)
+  s { localLookupTable = Map.insert arg (varIndex s) (localLookupTable s)
     , varIndex = varIndex s + 1 }
 
 genFuncArgVars :: [Expr] -> CodegenState ()
@@ -132,6 +149,7 @@ genFuncEnd :: CodegenState ()
 genFuncEnd = modify $ \s ->
   s { resultStr = resultStr s ++ "ret i32 %" ++ show (varIndex s - 1) ++ "\n}\n\n"
     , varIndex = 0
+    , currentScope = Global
     }
 
 sepWithCommas :: [String] -> String
