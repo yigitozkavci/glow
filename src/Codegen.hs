@@ -15,7 +15,6 @@ type Block = String
 data Scope = Global | Local
 data Codegen = Codegen
   { varCount  :: Int
-  , resultStr :: String
   , globalLookupTable :: LookupTable
   , localLookupTable :: LookupTable
   , currentScope :: Scope
@@ -51,7 +50,6 @@ initMainBlock = "\ndefine i32 @main() {\n"
 initCodegen :: Codegen
 initCodegen = Codegen
   { varCount = 0
-  , resultStr = ""
   , globalLookupTable = Map.empty
   , localLookupTable = Map.empty
   , currentScope = Global
@@ -96,13 +94,9 @@ genSingleExpr expr =
     Function name args ret ->
       genFunction name args ret
     BinOp op left right -> do
-      leftVal <- ensureVar left -- It might not be a Var though.
+      leftVal <- ensureVar left
       rightVal <- ensureVar right
-      case op of
-        Plus -> genPlusExpr leftVal rightVal
-        Minus -> genMinusExpr leftVal rightVal
-        Times -> genTimesExpr leftVal rightVal
-        Divide -> genDivideExpr leftVal rightVal
+      genBinOp leftVal rightVal op
     VarDecl name value -> genVarDecl name value
     Var a -> do
       _ <- ensureVar (Var a)
@@ -137,7 +131,7 @@ ensureVar expr =
 
 genLocalVar :: Double -> CodegenState Int
 genLocalVar num = state $ \s ->
-      (varIndex s, s { resultStr = resultStr s ++ localVarDecl (varIndex s) num
+      (varIndex s, s { currentBlock = currentBlock s ++ localVarDecl (varIndex s) num
                           , varIndex = varIndex s + 1
                      })
 
@@ -159,39 +153,27 @@ loadGlobalVar name = do
   increaseVarIndex
   return varIndex
 
+opCode :: Op -> String
+opCode Plus = "add"
+opCode Minus = "sub"
+opCode Times = "mul"
+opCode Divide = "udiv"
+
 genOpExpr :: Expr -> Expr -> CodegenState ()
 genOpExpr (Float a) (Float b) = emptyState
 
-genPlusExpr :: Int -> Int -> CodegenState ()
-genPlusExpr a b = modify $ \s ->
-  s { resultStr = resultStr s ++ "%" ++ show (varIndex s) ++ " = add i32 %" ++ show a ++ ", %" ++ show b ++ "\n"
-    , varIndex = varIndex s + 1
-    }
-
-genMinusExpr :: Int -> Int -> CodegenState ()
-genMinusExpr a b = modify $ \s ->
-  s { resultStr = resultStr s ++ "%" ++ show (varIndex s) ++ " = sub i32 %" ++ show a ++ ", %" ++ show b ++ "\n"
-    , varIndex = varIndex s + 1
-    }
-
-genTimesExpr :: Int -> Int -> CodegenState ()
-genTimesExpr a b = modify $ \s ->
-  s { resultStr = resultStr s ++ "%" ++ show (varIndex s) ++ " = mul i32 %" ++ show a ++ ", %" ++ show b ++ "\n"
-    , varIndex = varIndex s + 1
-    }
-
-genDivideExpr :: Int -> Int -> CodegenState ()
-genDivideExpr a b = modify $ \s ->
-  s { resultStr = resultStr s ++ "%" ++ show (varIndex s) ++ " = udiv i32 %" ++ show a ++ ", %" ++ show b ++ "\n"
+genBinOp :: Int -> Int -> Op -> CodegenState ()
+genBinOp left right op = modify $ \s ->
+  s { currentBlock = currentBlock s ++ "%" ++ show (varIndex s) ++ " = " ++ (opCode op) ++ "i32 %" ++ show left ++ ", %" ++ show right ++ "\n"
     , varIndex = varIndex s + 1
     }
 
 -- This is for 'unimplemented' causes only. Should not be shipped into the production
 emptyState :: CodegenState ()
-emptyState = modify $ \s -> s { resultStr = resultStr s ++ "[!] non-implemented expression!\n" }
+emptyState = modify $ \s -> s { currentBlock = currentBlock s ++ "[!] non-implemented expression!\n" }
 
 emptyState' :: Expr -> CodegenState ()
-emptyState' expr = modify $ \s -> s { resultStr = resultStr s ++ "[!] non-implemented expression:\n[!] " ++ show expr ++ "\n" }
+emptyState' expr = modify $ \s -> s { currentBlock = currentBlock s ++ "[!] non-implemented expression:\n[!] " ++ show expr ++ "\n" }
 
 genFunction :: Name -> [Expr] -> Expr -> CodegenState ()
 genFunction name args ret = do
