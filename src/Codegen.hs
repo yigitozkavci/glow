@@ -151,6 +151,10 @@ writeLoadGlobalVar name = state $ \s ->
                                   name ++
                                   ", align 4\n" })
 
+writeToBlock :: String -> CodegenState ()
+writeToBlock code = modify $ \s ->
+  s { currentBlock = currentBlock s ++ code ++ "\n" }
+  
 increaseVarIndex :: CodegenState ()
 increaseVarIndex = modify $ \s ->
   s { varIndex = varIndex s + 1 }
@@ -172,16 +176,15 @@ genOpExpr (Float a) (Float b) = emptyState
 
 genBinOp :: Int -> Int -> Op -> CodegenState ()
 genBinOp left right op = modify $ \s ->
-  s { currentBlock = currentBlock s ++ localVarDeclString (varIndex s) (opCode op ++ " i32 %" ++ show left ++ ", %" ++ show right ++ "\n")
-    , varIndex = varIndex s + 1
-    }
+  s { currentBlock = currentBlock s ++ localVarDeclString (varIndex s) (opCode op ++ " i32 %" ++ show left ++ ", %" ++ show right)
+    , varIndex = varIndex s + 1 }
 
 -- This is for 'unimplemented' causes only. Should not be shipped into the production
 emptyState :: CodegenState ()
-emptyState = modify $ \s -> s { currentBlock = currentBlock s ++ "[!] non-implemented expression!\n" }
+emptyState = writeToBlock "[!] non-implemented expression!"
 
 emptyState' :: Expr -> CodegenState ()
-emptyState' expr = modify $ \s -> s { currentBlock = currentBlock s ++ "[!] non-implemented expression:\n[!] " ++ show expr ++ "\n" }
+emptyState' expr = writeToBlock $ "[!] non-implemented expression:\n[!] " ++ show expr
 
 genFunction :: Name -> [Expr] -> Expr -> CodegenState ()
 genFunction name args ret = do
@@ -191,24 +194,31 @@ genFunction name args ret = do
   genFuncBody ret
   genFuncEnd
 
+setScope :: Scope -> CodegenState ()
+setScope scope = modify $ \s ->
+  s { currentScope = scope }
+  
 genFunctionDecl :: Name -> Int -> CodegenState ()
-genFunctionDecl name argCount = modify $ \s ->
-  s { currentBlock = "\ndefine i32 @" ++ name ++ "(" ++ argTypes ++ ") {\n"
-    , currentScope = Local
-    }
+genFunctionDecl name argCount = do
+  writeToBlock $ "\ndefine i32 @" ++ name ++ "(" ++ argTypes ++ ") {\n"
+  setScope Local
   where argTypes = sepWithCommas $ replicate argCount "i32"
 
 genFuncBody :: Expr -> CodegenState ()
 genFuncBody = genSingleExpr
 
 genFuncLabelVar :: CodegenState ()
-genFuncLabelVar = modify $ \s ->
-  s { varIndex = varIndex s + 1 } -- Should we record label var?
+genFuncLabelVar =
+  increaseVarIndex
 
+registerVar :: String -> CodegenState ()
+registerVar name = modify $ \s ->
+  s { localLookupTable = Map.insert name (varIndex s) (localLookupTable s) }
+  
 genFuncArgVar :: Expr -> CodegenState ()
-genFuncArgVar (Var arg) = modify $ \s ->
-  s { localLookupTable = Map.insert arg (varIndex s) (localLookupTable s)
-    , varIndex = varIndex s + 1 }
+genFuncArgVar (Var arg) = do
+  registerVar arg
+  increaseVarIndex
 
 genFuncArgVars :: [Expr] -> CodegenState ()
 genFuncArgVars [] = return ()
