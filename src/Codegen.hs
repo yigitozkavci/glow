@@ -134,9 +134,9 @@ ensureVar expr =
 
 genLocalVar :: Double -> CodegenState Int
 genLocalVar num = state $ \s ->
-      (varIndex s, s { currentBlock = currentBlock s ++ localVarDecl (varIndex s) num
-                          , varIndex = varIndex s + 1
-                     })
+  (varIndex s, s { currentBlock = currentBlock s ++ localVarDecl (varIndex s) num
+                 , varIndex = varIndex s + 1
+                 })
 
 indent :: String -> String
 indent = ("  " ++)
