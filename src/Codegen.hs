@@ -86,7 +86,7 @@ computeExprs (x:xs) = genSingleExpr x >> computeExprs xs
 codegen :: [Expr] -> Codegen
 codegen xs =
   let codegen = execState (computeExprs xs) initCodegen in
-  codegen { mainBlock = mainBlock codegen ++ "ret i32 1\n}" }
+  codegen { mainBlock = mainBlock codegen ++ indent "ret i32 1\n}" }
 
 genSingleExpr :: Expr -> CodegenState ()
 genSingleExpr expr =
@@ -102,6 +102,9 @@ genSingleExpr expr =
       _ <- ensureVar (Var a)
       return ()
     _ -> emptyState' expr
+
+localVarDeclString :: Int -> String -> String
+localVarDeclString lhs rhs = indent $ "%" ++ show lhs ++ " = " ++ rhs
 
 genVarDecl :: String -> Double -> CodegenState ()
 genVarDecl name value = modify $ \s ->
@@ -135,13 +138,18 @@ genLocalVar num = state $ \s ->
                           , varIndex = varIndex s + 1
                      })
 
+indent :: String -> String
+indent = ("  " ++)
+
 localVarDecl :: Int -> Double -> String
-localVarDecl a b = "%" ++ show a ++ " = add i32 0, " ++ show b ++ "\n"
+localVarDecl a b = localVarDeclString a "add i32 0, " ++ show b ++ "\n"
 
 writeLoadGlobalVar :: String -> CodegenState Int
 writeLoadGlobalVar name = state $ \s ->
-  (varIndex s, s { currentBlock = currentBlock s ++ "%" ++ show (varIndex s) ++
-                                       " = load i32, i32* @" ++ name ++ ", align 4\n" })
+  (varIndex s, s { currentBlock = currentBlock s ++
+                                  localVarDeclString (varIndex s) "load i32, i32* @" ++
+                                  name ++
+                                  ", align 4\n" })
 
 increaseVarIndex :: CodegenState ()
 increaseVarIndex = modify $ \s ->
@@ -164,7 +172,7 @@ genOpExpr (Float a) (Float b) = emptyState
 
 genBinOp :: Int -> Int -> Op -> CodegenState ()
 genBinOp left right op = modify $ \s ->
-  s { currentBlock = currentBlock s ++ "%" ++ show (varIndex s) ++ " = " ++ (opCode op) ++ "i32 %" ++ show left ++ ", %" ++ show right ++ "\n"
+  s { currentBlock = currentBlock s ++ localVarDeclString (varIndex s) (opCode op ++ " i32 %" ++ show left ++ ", %" ++ show right ++ "\n")
     , varIndex = varIndex s + 1
     }
 
@@ -212,7 +220,7 @@ genFuncEnd = modify $ \s ->
   s { varIndex = 0
     , currentScope = Global
     , localLookupTable = emptyLookupTable
-    , funcBlocks = (currentBlock s ++ "ret i32 %" ++ show (varIndex s - 1) ++ "\n}\n\n") : funcBlocks s
+    , funcBlocks = (currentBlock s ++ indent ("ret i32 %" ++ show (varIndex s - 1) ++ "\n}\n\n")) : funcBlocks s
     , currentBlock = ""
     }
 
