@@ -37,11 +37,11 @@ initCodegen = Codegen
   , localVarIndex = 0
   }
 
-lookup' :: String -> Codegen -> Maybe Int
+lookup' :: String -> Codegen -> Maybe (Scope, Int)
 lookup' key codegen =
   case currentScope codegen of
-    Global -> Map.lookup key (globalLookupTable codegen)
-    Local -> Map.lookup key (localLookupTable codegen)
+    Global -> (,) Global <$> Map.lookup key (globalLookupTable codegen)
+    Local -> (,) Local <$> Map.lookup key (localLookupTable codegen)
 
 {- Returns a state computation with given expression array -}
 computeExprs :: [Expr] -> CodegenState ()
@@ -76,7 +76,7 @@ ensureVar expr =
     (Var a) -> state $ \s ->
       let var = lookup' a s in
       case var of
-        Just a -> (a, s)
+        Just (_, a) -> (a, s)
         Nothing -> error $ "Variable " ++ a ++ " is not defined!"
     (Float num) -> state $ \s ->
       (localVarIndex s, s { resultStr = resultStr s ++ defFloat (localVarIndex s) num
