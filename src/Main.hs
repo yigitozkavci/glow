@@ -27,8 +27,6 @@ process line = do
       where code = serializeBlocks (codegen ex)
 
 main :: IO ()
-main = runInputT defaultSettings loop
-  where
-  loop = do
-    minput <- liftIO $ readFile "in.gl"
-    liftIO (process minput) -- >> loop
+main = do
+  minput <- readFile "in.gl"
+  process minput
