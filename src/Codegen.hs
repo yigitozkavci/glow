@@ -200,7 +200,7 @@ setScope scope = modify $ \s ->
   
 genFunctionDecl :: Name -> Int -> CodegenState ()
 genFunctionDecl name argCount = do
-  writeToBlock $ "\ndefine i32 @" ++ name ++ "(" ++ argTypes ++ ") {\n"
+  writeToBlock $ "\ndefine i32 @" ++ name ++ "(" ++ argTypes ++ ") {"
   setScope Local
   where argTypes = sepWithCommas $ replicate argCount "i32"
 
