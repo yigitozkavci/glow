@@ -20,8 +20,12 @@ process line = do
   case res of
     Left err -> print err
     Right ex -> do
+      putStrLn "\n== GENERATED CODE ==\n"
       putStrLn code
+      putStrLn "\n"
+      putStrLn "====== OUTPUT ======"
       writeFile "out.ll" code
+      putStrLn "====================\n"
       createProcess (proc "lli" ["out.ll"])
       return ()
       where code = serializeBlocks (codegen ex)
