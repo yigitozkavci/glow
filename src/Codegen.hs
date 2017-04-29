@@ -1,260 +1,273 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 module Codegen where
 
-import Syntax
-import Lexer
-import Control.Monad.Identity
-import Control.Monad.State hiding (State)
-import qualified Data.Map.Strict as Map
-import Data.Maybe
+import Data.Word
+import Data.String
+import Data.List
+import Data.Function
+import qualified Data.Map as Map
 
-type State s = StateT s Identity
-type LookupTable = Map.Map String Int
-type CodegenState a = State Codegen a
-type Block = String
+import Control.Monad.State
+import Control.Applicative
 
-data Scope = Global | Local
-data Codegen = Codegen
-  { varCount  :: Int
-  , globalLookupTable :: LookupTable
-  , localLookupTable :: LookupTable
-  , currentScope :: Scope
-  , varIndex :: Int
-  , globalBlock :: Block
-  , funcBlocks :: [Block]
-  , mainBlock :: Block
-  , currentBlock :: Block
-  , globalVars :: [String]
+import LLVM.General.AST
+import LLVM.General.AST.Global
+import qualified LLVM.General.AST as AST
+
+import qualified LLVM.General.AST.Constant as C
+import qualified LLVM.General.AST.Attribute as A
+import qualified LLVM.General.AST.CallingConvention as CC
+import qualified LLVM.General.AST.FloatingPointPredicate as FP
+
+-------------------------------------------------------------------------------
+-- Module Level
+-------------------------------------------------------------------------------
+
+newtype LLVM a = LLVM { unLLVM :: State AST.Module a }
+  deriving (Functor, Applicative, Monad, MonadState AST.Module )
+
+runLLVM :: AST.Module -> LLVM a -> AST.Module
+runLLVM = flip (execState . unLLVM)
+
+emptyModule :: String -> AST.Module
+emptyModule label = defaultModule { moduleName = label }
+
+addDefn :: Definition -> LLVM ()
+addDefn d = do
+  defs <- gets moduleDefinitions
+  modify $ \s -> s { moduleDefinitions = defs ++ [d] }
+
+define ::  Type -> String -> [(Type, Name)] -> [BasicBlock] -> LLVM ()
+define retty label argtys body = addDefn $
+  GlobalDefinition $ functionDefaults {
+    name        = Name label
+  , parameters  = ([Parameter ty nm [] | (ty, nm) <- argtys], False)
+  , returnType  = retty
+  , basicBlocks = body
   }
 
-{- Block structure:
- - |================================== |
- - | Global Variable Decleration Block |
- - |================================== |
- - | Function Decleration Blocks       | TODO: Take care of function orders. In LLVM, that matters.
- - |================================== |
- - | Main Method Block                 |
- - |================================== |
- -}
-emptyLookupTable :: LookupTable
-emptyLookupTable = Map.empty
-
-parseFunction :: CodegenState ()
-parseFunction = modify $ \s -> s { varCount = varCount s + 1 }
-
-initGlobalBlock :: String
-initGlobalBlock = ""
-
-initMainBlock :: String
-initMainBlock = "\ndefine i32 @main() {\n"
-
-initCodegen :: Codegen
-initCodegen = Codegen
-  { varCount = 0
-  , globalLookupTable = Map.empty
-  , localLookupTable = Map.empty
-  , currentScope = Global
-  , varIndex = 0
-  , globalBlock = initGlobalBlock
-  , funcBlocks = []
-  , mainBlock = initMainBlock
-  , globalVars = []
-  , currentBlock = ""
+external ::  Type -> String -> [(Type, Name)] -> LLVM ()
+external retty label argtys = addDefn $
+  GlobalDefinition $ functionDefaults {
+    name        = Name label
+  , parameters  = ([Parameter ty nm [] | (ty, nm) <- argtys], False)
+  , returnType  = retty
+  , basicBlocks = []
   }
 
-maybeElem :: (Eq a, Foldable t) => a -> t a -> Maybe a
-maybeElem x xs = if x `elem` xs then Just x else Nothing
+---------------------------------------------------------------------------------
+-- Types
+-------------------------------------------------------------------------------
 
-maybeOr :: Maybe a -> Maybe b -> Maybe (Either a b)
-maybeOr (Just a) (Just b) = error "maybeOr requires at most 1 of operands to exist"
-maybeOr (Just a) Nothing = Just (Left a)
-maybeOr Nothing (Just b) = Just (Right b)
-maybeOr Nothing Nothing = Nothing
+-- IEEE 754 double
+double :: Type
+double = FloatingPointType 64 IEEE
 
-lookup' :: String -> CodegenState (Maybe (Either String Int))
-lookup' key = state $ \codegen -> let
-  result = maybeOr
-    (maybeElem key (globalVars codegen))
-    (Map.lookup key (localLookupTable codegen))
-  in
-    (result, codegen)
+-------------------------------------------------------------------------------
+-- Names
+-------------------------------------------------------------------------------
 
-{- Returns a state computation with given expression array -}
-computeExprs :: [Expr] -> CodegenState ()
-computeExprs [x] = genSingleExpr x
-computeExprs (x:xs) = genSingleExpr x >> computeExprs xs
+type Names = Map.Map String Int
 
-codegen :: [Expr] -> Codegen
-codegen xs =
-  let codegen = execState (computeExprs xs) initCodegen in
-  codegen { mainBlock = mainBlock codegen ++ indent "ret i32 1\n}" }
+uniqueName :: String -> Names -> (String, Names)
+uniqueName nm ns =
+  case Map.lookup nm ns of
+    Nothing -> (nm,  Map.insert nm 1 ns)
+    Just ix -> (nm ++ show ix, Map.insert nm (ix+1) ns)
 
-genSingleExpr :: Expr -> CodegenState ()
-genSingleExpr expr =
-  case expr of
-    Function name args ret ->
-      genFunction name args ret
-    BinOp op left right -> do
-      leftVal <- ensureVar left
-      rightVal <- ensureVar right
-      genBinOp leftVal rightVal op
-    VarDecl name value -> genVarDecl name value
-    Var a -> do
-      _ <- ensureVar (Var a)
-      return ()
-    _ -> emptyState' expr
+instance IsString Name where
+  fromString = Name . fromString
 
-localVarDeclString :: Int -> String -> String
-localVarDeclString lhs rhs = indent $ "%" ++ show lhs ++ " = " ++ rhs
+-------------------------------------------------------------------------------
+-- Codegen State
+-------------------------------------------------------------------------------
 
-genVarDecl :: String -> Double -> CodegenState ()
-genVarDecl name value = modify $ \s ->
-  s { globalBlock = globalBlock s ++
-                  "@" ++
-                  name ++
-                  " = weak global i32 " ++
-                  show (floor value) ++
-                  "\n"
-    , globalVars = name : globalVars s
-    }
+type SymbolTable = [(String, Operand)]
 
-{- Ensure that given expression is a variable. In LLVM, we basically need every
- - argument as variables. If a double is given, we first declare it within the scope
- - then use it. This method exactly does that.
- -}
-ensureVar :: Expr -> CodegenState Int
-ensureVar expr =
-  case expr of
-    (Var a) -> do
-      var <- lookup' a
-      case var of
-        Just (Left name) -> loadGlobalVar name
-        Just (Right var) -> return var
-        Nothing -> error $ "Variable " ++ a ++ " is not defined!"
-    (Float num) -> genLocalVar num
+data CodegenState
+  = CodegenState {
+    currentBlock :: Name                     -- Name of the active block to append to
+  , blocks       :: Map.Map Name BlockState  -- Blocks for function
+  , symtab       :: SymbolTable              -- Function scope symbol table
+  , blockCount   :: Int                      -- Count of basic blocks
+  , count        :: Word                     -- Count of unnamed instructions
+  , names        :: Names                    -- Name Supply
+  } deriving Show
 
-genLocalVar :: Double -> CodegenState Int
-genLocalVar num = state $ \s ->
-  (varIndex s, s { currentBlock = currentBlock s ++ localVarDecl (varIndex s) num
-                 , varIndex = varIndex s + 1
-                 })
+data BlockState
+  = BlockState {
+    idx   :: Int                            -- Block index
+  , stack :: [Named Instruction]            -- Stack of instructions
+  , term  :: Maybe (Named Terminator)       -- Block terminator
+  } deriving Show
 
-indent :: String -> String
-indent = ("  " ++)
+-------------------------------------------------------------------------------
+-- Codegen Operations
+-------------------------------------------------------------------------------
 
-localVarDecl :: Int -> Double -> String
-localVarDecl a b = localVarDeclString a "add i32 0, " ++ show b ++ "\n"
+newtype Codegen a = Codegen { runCodegen :: State CodegenState a }
+  deriving (Functor, Applicative, Monad, MonadState CodegenState )
 
-writeLoadGlobalVar :: String -> CodegenState Int
-writeLoadGlobalVar name = state $ \s ->
-  (varIndex s, s { currentBlock = currentBlock s ++
-                                  localVarDeclString (varIndex s) "load i32, i32* @" ++
-                                  name ++
-                                  ", align 4\n" })
+sortBlocks :: [(Name, BlockState)] -> [(Name, BlockState)]
+sortBlocks = sortBy (compare `on` (idx . snd))
 
-writeToBlock :: String -> CodegenState ()
-writeToBlock code = modify $ \s ->
-  s { currentBlock = currentBlock s ++ code ++ "\n" }
-  
-increaseVarIndex :: CodegenState ()
-increaseVarIndex = modify $ \s ->
-  s { varIndex = varIndex s + 1 }
+createBlocks :: CodegenState -> [BasicBlock]
+createBlocks m = map makeBlock $ sortBlocks $ Map.toList (blocks m)
 
-loadGlobalVar :: String -> CodegenState Int
-loadGlobalVar name = do
-  varIndex <- writeLoadGlobalVar name
-  increaseVarIndex
-  return varIndex
+makeBlock :: (Name, BlockState) -> BasicBlock
+makeBlock (l, (BlockState _ s t)) = BasicBlock l s (maketerm t)
+  where
+    maketerm (Just x) = x
+    maketerm Nothing = error $ "Block has no terminator: " ++ (show l)
 
-opCode :: Op -> String
-opCode Plus = "add"
-opCode Minus = "sub"
-opCode Times = "mul"
-opCode Divide = "udiv"
+entryBlockName :: String
+entryBlockName = "entry"
 
-genOpExpr :: Expr -> Expr -> CodegenState ()
-genOpExpr (Float a) (Float b) = emptyState
+emptyBlock :: Int -> BlockState
+emptyBlock i = BlockState i [] Nothing
 
-genBinOp :: Int -> Int -> Op -> CodegenState ()
-genBinOp left right op = modify $ \s ->
-  s { currentBlock = currentBlock s ++ localVarDeclString (varIndex s) (opCode op ++ " i32 %" ++ show left ++ ", %" ++ show right)
-    , varIndex = varIndex s + 1 }
+emptyCodegen :: CodegenState
+emptyCodegen = CodegenState (Name entryBlockName) Map.empty [] 1 0 Map.empty
 
--- This is for 'unimplemented' causes only. Should not be shipped into the production
-emptyState :: CodegenState ()
-emptyState = writeToBlock "[!] non-implemented expression!"
+execCodegen :: Codegen a -> CodegenState
+execCodegen m = execState (runCodegen m) emptyCodegen
 
-emptyState' :: Expr -> CodegenState ()
-emptyState' expr = writeToBlock $ "[!] non-implemented expression:\n[!] " ++ show expr
+fresh :: Codegen Word
+fresh = do
+  i <- gets count
+  modify $ \s -> s { count = 1 + i }
+  return $ i + 1
 
-genFunction :: Name -> [Expr] -> Expr -> CodegenState ()
-genFunction name args ret = do
-  genFunctionDecl name (length args)
-  genFuncArgVars args
-  genFuncLabelVar
-  genFuncBody ret
-  genFuncEnd
+instr :: Instruction -> Codegen (Operand)
+instr ins = do
+  n <- fresh
+  let ref = (UnName n)
+  blk <- current
+  let i = stack blk
+  modifyBlock (blk { stack = i ++ [ref := ins] } )
+  return $ local ref
 
-setScope :: Scope -> CodegenState ()
-setScope scope = modify $ \s ->
-  s { currentScope = scope }
-  
-genFunctionDecl :: Name -> Int -> CodegenState ()
-genFunctionDecl name argCount = do
-  writeToBlock $ "\ndefine i32 @" ++ name ++ "(" ++ argTypes ++ ") {"
-  setScope Local
-  where argTypes = sepWithCommas $ replicate argCount "i32"
+terminator :: Named Terminator -> Codegen (Named Terminator)
+terminator trm = do
+  blk <- current
+  modifyBlock (blk { term = Just trm })
+  return trm
 
-genFuncBody :: Expr -> CodegenState ()
-genFuncBody = genSingleExpr
+-------------------------------------------------------------------------------
+-- Block Stack
+-------------------------------------------------------------------------------
 
-genFuncLabelVar :: CodegenState ()
-genFuncLabelVar =
-  increaseVarIndex
+entry :: Codegen Name
+entry = gets currentBlock
 
-registerVar :: String -> CodegenState ()
-registerVar name = modify $ \s ->
-  s { localLookupTable = Map.insert name (varIndex s) (localLookupTable s) }
-  
-genFuncArgVar :: Expr -> CodegenState ()
-genFuncArgVar (Var arg) = do
-  registerVar arg
-  increaseVarIndex
+addBlock :: String -> Codegen Name
+addBlock bname = do
+  bls <- gets blocks
+  ix <- gets blockCount
+  nms <- gets names
+  let new = emptyBlock ix
+      (qname, supply) = uniqueName bname nms
+  modify $ \s -> s { blocks = Map.insert (Name qname) new bls
+                   , blockCount = ix + 1
+                   , names = supply
+                   }
+  return (Name qname)
 
-genFuncArgVars :: [Expr] -> CodegenState ()
-genFuncArgVars [] = return ()
-genFuncArgVars [x] = genFuncArgVar x
-genFuncArgVars (x:xs) = genFuncArgVar x >> genFuncArgVars xs
+setBlock :: Name -> Codegen Name
+setBlock bname = do
+  modify $ \s -> s { currentBlock = bname }
+  return bname
 
-genFuncEnd :: CodegenState ()
-genFuncEnd = modify $ \s ->
-  s { varIndex = 0
-    , currentScope = Global
-    , localLookupTable = emptyLookupTable
-    , funcBlocks = (currentBlock s ++ indent ("ret i32 %" ++ show (varIndex s - 1) ++ "\n}\n\n")) : funcBlocks s
-    , currentBlock = ""
-    }
+getBlock :: Codegen Name
+getBlock = gets currentBlock
 
-sepWithCommas :: [String] -> String
-sepWithCommas [] = ""
-sepWithCommas [x] = x
-sepWithCommas (x:xs) = x ++ ", " ++ sepWithCommas xs
+modifyBlock :: BlockState -> Codegen ()
+modifyBlock new = do
+  active <- gets currentBlock
+  modify $ \s -> s { blocks = Map.insert active new (blocks s) }
 
-insideFunction :: [Expr] -> Expr -> String
-insideFunction args expr =
-  ""
+current :: Codegen BlockState
+current = do
+  c <- gets currentBlock
+  blks <- gets blocks
+  case Map.lookup c blks of
+    Just x -> return x
+    Nothing -> error $ "No such block: " ++ show c
 
-argSep :: [Expr] -> String
-argSep [last] = "i32"
-argSep (x:xs) = "i32, " ++ argSep xs
+-------------------------------------------------------------------------------
+-- Symbol Table
+-------------------------------------------------------------------------------
 
-showVar :: Expr -> String
-showVar (Var name) = name
-showVar _ = ""
+assign :: String -> Operand -> Codegen ()
+assign var x = do
+  lcls <- gets symtab
+  modify $ \s -> s { symtab = [(var, x)] ++ lcls }
 
-{-
-define void @wow(i32, i32, i32) {
-  %3 = add i32 %0 %
-}
+getvar :: String -> Codegen Operand
+getvar var = do
+  syms <- gets symtab
+  case lookup var syms of
+    Just x  -> return x
+    Nothing -> error $ "Local variable not in scope: " ++ show var
 
-def wow(a, b, c) = a + b;
- -}
+-------------------------------------------------------------------------------
+
+-- References
+local ::  Name -> Operand
+local = LocalReference double
+
+global ::  Name -> C.Constant
+global = C.GlobalReference double
+
+externf :: Name -> Operand
+externf = ConstantOperand . C.GlobalReference double
+
+-- Arithmetic and Constants
+fadd :: Operand -> Operand -> Codegen Operand
+fadd a b = instr $ FAdd NoFastMathFlags a b []
+
+fsub :: Operand -> Operand -> Codegen Operand
+fsub a b = instr $ FSub NoFastMathFlags a b []
+
+fmul :: Operand -> Operand -> Codegen Operand
+fmul a b = instr $ FMul NoFastMathFlags a b []
+
+fdiv :: Operand -> Operand -> Codegen Operand
+fdiv a b = instr $ FDiv NoFastMathFlags a b []
+
+fcmp :: FP.FloatingPointPredicate -> Operand -> Operand -> Codegen Operand
+fcmp cond a b = instr $ FCmp cond a b []
+
+cons :: C.Constant -> Operand
+cons = ConstantOperand
+
+uitofp :: Type -> Operand -> Codegen Operand
+uitofp ty a = instr $ UIToFP a ty []
+
+toArgs :: [Operand] -> [(Operand, [A.ParameterAttribute])]
+toArgs = map (\x -> (x, []))
+
+-- Effects
+call :: Operand -> [Operand] -> Codegen Operand
+call fn args = instr $ Call Nothing CC.C [] (Right fn) (toArgs args) [] []
+
+alloca :: Type -> Codegen Operand
+alloca ty = instr $ Alloca ty Nothing 0 []
+
+store :: Operand -> Operand -> Codegen Operand
+store ptr val = instr $ Store False ptr val Nothing 0 []
+
+load :: Operand -> Codegen Operand
+load ptr = instr $ Load False ptr Nothing 0 []
+
+-- Control Flow
+br :: Name -> Codegen (Named Terminator)
+br val = terminator $ Do $ Br val []
+
+cbr :: Operand -> Name -> Name -> Codegen (Named Terminator)
+cbr cond tr fl = terminator $ Do $ CondBr cond tr fl []
+
+ret :: Operand -> Codegen (Named Terminator)
+ret val = terminator $ Do $ Ret (Just val) []
