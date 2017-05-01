@@ -11,11 +11,13 @@ import qualified LLVM.General.AST.Constant as C
 import qualified LLVM.General.AST.Float as F
 import qualified LLVM.General.AST.FloatingPointPredicate as FP
 
+import qualified LLVM.General.ExecutionEngine as EE
 import Data.Word
 import Data.Int
 import Control.Monad.Except
 import Control.Applicative
 import qualified Data.Map as Map
+import Foreign.Ptr
 
 import Codegen
 import qualified Syntax as S
@@ -31,7 +33,7 @@ codegenTop (S.Function name args body) =
     bls = createBlocks $ execCodegen $ do
       entry <- addBlock entryBlockName
       setBlock entry
-      forM args $ \a -> do
+      forM_ args $ \a -> do
         var <- alloca double
         store var (local (AST.Name a))
         assign a var
@@ -95,16 +97,33 @@ cgen (S.Call fn args) = do
 passes :: PassSetSpec
 passes = defaultCuratedPassSetSpec { optLevel = Just 3 }
 
+foreign import ccall "dynamic" haskFun :: FunPtr (IO Double) -> IO Double
+
+run :: FunPtr a -> IO Double
+run fn = haskFun (castFunPtr fn :: FunPtr (IO Double))
+
 runJIT :: AST.Module -> IO (Either String AST.Module)
 runJIT mod =
   withContext $ \context ->
-    runExceptT $ withModuleFromAST context mod $ \m ->
-      withPassManager passes $ \pm -> do
-        runPassManager pm m
-        optmod <- moduleAST m
-        s <- moduleLLVMAssembly m
-        putStrLn s
-        return optmod
+    jit context $ \executionEngine ->
+      runExceptT $ withModuleFromAST context mod $ \m ->
+        withPassManager passes $ \pm -> do
+          -- runPassManager pm m
+          optmod <- moduleAST m
+          s <- moduleLLVMAssembly m
+          putStrLn s
+
+          EE.withModuleInEngine executionEngine m $ \ee -> do
+            mainfn <- EE.getFunction ee (AST.Name "main")
+            case mainfn of
+              Just fn -> do
+                res <- run fn
+                putStrLn $ "Evaluated to: " ++ show res
+              Nothing -> do
+                putStrLn "Function could not be evaluated."
+                return ()
+
+          return optmod
 
 liftError :: ExceptT String IO a -> IO a
 liftError = runExceptT >=> either fail return
@@ -118,3 +137,11 @@ codegen mod fns = withContext $ \context ->
   where
     modn    = mapM codegenTop fns
     newast  = runLLVM mod modn
+
+jit :: Context -> (EE.MCJIT -> IO a) -> IO a
+jit context = EE.withMCJIT context optlevel model ptrelim fastins
+  where
+    optlevel = Just 2
+    model    = Nothing
+    ptrelim  = Nothing
+    fastins  = Nothing
