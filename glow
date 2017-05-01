@@ -1,5 +1,12 @@
 #!/bin/bash
 
+function check_glowpath {
+  if [ -z "$GLOWPATH" ]; then
+    echo "GLOWPATH env variable is not set. Set it to your glow project directory."
+    exit 1
+  fi
+}
+
 function compile_lib_files {
   gcc -fPIC -shared ./lib/cbits.c ./lib/cbits2.c -o lib/lib.so
 }
@@ -33,6 +40,7 @@ function clear {
 }
 
 function compile {
+  check_glowpath
   echo "[.] Compiling..."
   create_path
   compile_lib_files
@@ -41,6 +49,7 @@ function compile {
 }
 
 function run {
+  check_glowpath
   EXECUTABLE=$GLOWPATH/build/Main
   if ! [[ -f $EXECUTABLE ]]; then
     echo "[.] Need to compile before running glow. Compiling..."
@@ -49,11 +58,6 @@ function run {
   echo "[.] Running glow..."
   $GLOWPATH/build/Main
 }
-
-if [ -z "$GLOWPATH" ]; then
-  echo "GLOWPATH env variable is not set. Set it to your glow project directory."
-  exit 1
-fi
 
 case $1 in
 clear)
