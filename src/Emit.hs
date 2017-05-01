@@ -4,6 +4,7 @@ module Emit where
 
 import LLVM.General.Module
 import LLVM.General.Context
+import LLVM.General.PassManager
 
 import qualified LLVM.General.AST as AST
 import qualified LLVM.General.AST.Constant as C
@@ -23,7 +24,7 @@ toSig :: [String] -> [(AST.Type, AST.Name)]
 toSig = map (\x -> (double, AST.Name x))
 
 codegenTop :: S.Expr -> LLVM ()
-codegenTop (S.Function name args body) = do
+codegenTop (S.Function name args body) =
   define double name fnargs bls
   where
     fnargs = toSig args
@@ -36,11 +37,11 @@ codegenTop (S.Function name args body) = do
         assign a var
       cgen body >>= ret
 
-codegenTop (S.Extern name args) = do
+codegenTop (S.Extern name args) =
   external double name fnargs
   where fnargs = toSig args
 
-codegenTop exp = do
+codegenTop exp =
   define double "main" [] blks
   where
     blks = createBlocks $ execCodegen $ do
@@ -57,6 +58,7 @@ lt a b = do
   test <- fcmp FP.ULT a b
   uitofp double test
 
+binops :: Map.Map String (AST.Operand -> AST.Operand -> Codegen AST.Operand)
 binops = Map.fromList [
       ("+", fadd)
     , ("-", fsub)
@@ -90,6 +92,20 @@ cgen (S.Call fn args) = do
 -- Compilation
 -------------------------------------------------------------------------------
 
+passes :: PassSetSpec
+passes = defaultCuratedPassSetSpec { optLevel = Just 3 }
+
+runJIT :: AST.Module -> IO (Either String AST.Module)
+runJIT mod =
+  withContext $ \context ->
+    runExceptT $ withModuleFromAST context mod $ \m ->
+      withPassManager passes $ \pm -> do
+        runPassManager pm m
+        optmod <- moduleAST m
+        s <- moduleLLVMAssembly m
+        putStrLn s
+        return optmod
+
 liftError :: ExceptT String IO a -> IO a
 liftError = runExceptT >=> either fail return
 
@@ -97,7 +113,7 @@ codegen :: AST.Module -> [S.Expr] -> IO AST.Module
 codegen mod fns = withContext $ \context ->
   liftError $ withModuleFromAST context newast $ \m -> do
     llstr <- moduleLLVMAssembly m
-    putStrLn llstr
+    -- putStrLn llstr
     return newast
   where
     modn    = mapM codegenTop fns

@@ -22,7 +22,10 @@ process modo source = do
     Left err -> print err >> return Nothing
     Right ex -> do
       ast <- codegen modo ex
-      return $ Just ast
+      compileResult <- runJIT ast
+      case compileResult of
+        Left err -> print err >> return Nothing
+        Right ast' -> return $ Just ast'
 
 processFile :: String -> IO (Maybe AST.Module)
 processFile fname = readFile fname >>= process initModule
