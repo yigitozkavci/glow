@@ -1,0 +1,71 @@
+#!/bin/bash
+
+function compile_lib_files {
+  gcc -fPIC -shared ./lib/cbits.c ./lib/cbits2.c -o lib/lib.so
+}
+
+function create_path {
+  local SL_FILE=$GLOWPATH/lib/lib.so
+  if ! [[ $LD_LIBRARY_PATH == *$SL_FILE* ]]; then
+    echo "adding LD_LIBRARY_PATH to $HOME/.bashrc"
+    echo "export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$SL_FILE" >> $HOME/.bashrc
+  fi
+}
+
+function link_and_compile_main {
+  if ! [[ -d $GLOWPATH/build ]]; then
+    echo "[.] Build directory does not exist. Creating it."
+    mkdir $GLOWPATH/build
+  fi
+  cd $GLOWPATH/src
+  for s_object in $GLOWPATH/lib/*.so; do
+    ghc $GLOWPATH/lib/lib.so --make $GLOWPATH/src/Main.hs -package-db $GLOWPATH/.cabal-sandbox/x86_64-linux-ghc-7.10.3-packages.conf.d -o $GLOWPATH/build/Main
+  done
+}
+
+function clear {
+  echo "[.] Clearing..."
+  rm src/*.hi
+  rm src/*.o
+  rm lib/*.so
+  rm -r $GLOWPATH/build/*
+  echo "[.] Cleared."
+}
+
+function compile {
+  echo "[.] Compiling..."
+  create_path
+  compile_lib_files
+  link_and_compile_main
+  echo "[.] Compilation complete."
+}
+
+function run {
+  EXECUTABLE=$GLOWPATH/build/Main
+  if ! [[ -f $EXECUTABLE ]]; then
+    echo "[.] Need to compile before running glow. Compiling..."
+    compile
+  fi
+  echo "[.] Running glow..."
+  $GLOWPATH/build/Main
+}
+
+if [ -z "$GLOWPATH" ]; then
+  echo "GLOWPATH env variable is not set. Set it to your glow project directory."
+  exit 1
+fi
+
+case $1 in
+clear)
+  clear
+  ;;
+compile)
+  compile
+  ;;
+run)
+  run
+  ;;
+*)
+  compile
+  ;;
+esac
