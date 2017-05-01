@@ -32,10 +32,11 @@ function link_and_compile_main {
 
 function clear {
   echo "[.] Clearing..."
-  rm src/*.hi
-  rm src/*.o
-  rm lib/*.so
-  rm -r $GLOWPATH/build/*
+  # -f option is for not giving a warning about file not existing
+  rm -f src/*.hi
+  rm -f src/*.o
+  rm -f lib/*.so
+  rm -rf $GLOWPATH/build/*
   echo "[.] Cleared."
 }
 
