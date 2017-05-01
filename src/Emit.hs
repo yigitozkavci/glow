@@ -22,6 +22,11 @@ import Foreign.Ptr
 import Codegen
 import qualified Syntax as S
 
+one = cons $ C.Float (F.Double 1.0)
+zero = cons $ C.Float (F.Double 0.0)
+true = one
+false = zero
+
 toSig :: [String] -> [(AST.Type, AST.Name)]
 toSig = map (\x -> (double, AST.Name x))
 
@@ -89,6 +94,32 @@ cgen (S.Float n) = return $ cons $ C.Float (F.Double n)
 cgen (S.Call fn args) = do
   largs <- mapM cgen args
   call (externf (AST.Name fn)) largs
+cgen (S.If cond tr fl) = do
+  ifthen <- addBlock "if.then"
+  ifelse <- addBlock "if.else"
+  ifexit <- addBlock "if.exit"
+
+  -- %entry
+  -----------------
+  cond <- cgen cond
+  test <- fcmp FP.ONE false cond
+  cbr test ifthen ifelse
+
+  -- if.then
+  setBlock ifthen
+  trval <- cgen tr
+  br ifexit
+  ifthen <- getBlock
+
+  -- if.else
+  setBlock ifelse
+  flval <- cgen fl
+  br ifexit
+  ifelse <- getBlock
+
+  -- if.exit
+  setBlock ifexit
+  phi double [(trval, ifthen), (flval, ifelse)]
 
 -------------------------------------------------------------------------------
 -- Compilation

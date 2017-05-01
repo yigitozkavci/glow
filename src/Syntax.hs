@@ -10,4 +10,5 @@ data Expr
   | Extern Name [Name]
   | BinaryOp Name Expr Expr
   | UnaryOp Name Expr
+  | If Expr Expr Expr
   deriving (Eq, Ord, Show)

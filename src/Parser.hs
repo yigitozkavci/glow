@@ -47,6 +47,16 @@ extern = do
   args <- parens $ many identifier
   return $ Extern name args
 
+ifthen :: Parser Expr
+ifthen = do
+  reserved "if"
+  cond <- expr
+  reserved "then"
+  tr <- expr
+  reserved "else"
+  fl <- expr
+  return $ If cond tr fl
+
 call :: Parser Expr
 call = do
   name <- identifier
@@ -58,6 +68,7 @@ factor = try floating
       <|> try int
       <|> try call
       <|> try variable
+      <|> try ifthen
       <|> (parens expr)
 
 defn :: Parser Expr

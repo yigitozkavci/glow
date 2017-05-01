@@ -168,7 +168,7 @@ addBlock bname = do
   ix <- gets blockCount
   nms <- gets names
   let new = emptyBlock ix
-      (qname, supply) = uniqueName bname nms
+  let (qname, supply) = uniqueName bname nms
   modify $ \s -> s { blocks = Map.insert (Name qname) new bls
                    , blockCount = ix + 1
                    , names = supply
@@ -268,6 +268,9 @@ br val = terminator $ Do $ Br val []
 
 cbr :: Operand -> Name -> Name -> Codegen (Named Terminator)
 cbr cond tr fl = terminator $ Do $ CondBr cond tr fl []
+
+phi :: Type -> [(Operand, Name)] -> Codegen Operand
+phi ty incoming = instr $ Phi ty incoming []
 
 ret :: Operand -> Codegen (Named Terminator)
 ret val = terminator $ Do $ Ret (Just val) []
