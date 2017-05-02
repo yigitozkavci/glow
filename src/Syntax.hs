@@ -11,4 +11,5 @@ data Expr
   | BinaryOp Name Expr Expr
   | UnaryOp Name Expr
   | If Expr Expr Expr
+  | For Name Expr Expr Expr Expr
   deriving (Eq, Ord, Show)

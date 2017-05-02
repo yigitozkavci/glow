@@ -20,10 +20,15 @@ floating = Float <$> float
 
 binary s assoc = Ex.Infix (reservedOp s >> return (BinaryOp s)) assoc
 
-binops = [[binary "*" Ex.AssocLeft,
-          binary "/" Ex.AssocLeft]
-        ,[binary "+" Ex.AssocLeft,
-          binary "-" Ex.AssocLeft]]
+binops = [ [ binary "*" Ex.AssocLeft
+           , binary "/" Ex.AssocLeft
+           ]
+         , [ binary "+" Ex.AssocLeft
+           , binary "-" Ex.AssocLeft
+           ]
+         , [ binary "<" Ex.AssocLeft
+           ]
+         ]
 
 expr :: Parser Expr
 expr =  Ex.buildExpressionParser binops factor
@@ -36,7 +41,7 @@ function = do
   reserved "def"
   name <- identifier
   args <- parens $ commaSep identifier
-  reserved "="
+  reservedOp "="
   body <- expr
   return $ Function name args body
 
@@ -57,6 +62,20 @@ ifthen = do
   fl <- expr
   return $ If cond tr fl
 
+for :: Parser Expr
+for = do
+  reserved "for"
+  var <- identifier
+  reservedOp "="
+  start <- expr
+  reservedOp ","
+  cond <- expr
+  reservedOp ","
+  step <- expr
+  reserved "in"
+  body <- expr
+  return $ For var start cond step body
+
 call :: Parser Expr
 call = do
   name <- identifier
@@ -69,6 +88,7 @@ factor = try floating
       <|> try call
       <|> try variable
       <|> try ifthen
+      <|> try for
       <|> (parens expr)
 
 defn :: Parser Expr
