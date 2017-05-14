@@ -18,6 +18,13 @@ int = do
 floating :: Parser Expr
 floating = Float <$> float
 
+op :: Parser String
+op = do
+  whitespace
+  o <- operator
+  whitespace
+  return o
+
 binary s assoc = Ex.Infix (reservedOp s >> return (BinaryOp s)) assoc
 
 binops = [ [ binary "*" Ex.AssocLeft
@@ -30,8 +37,11 @@ binops = [ [ binary "*" Ex.AssocLeft
            ]
          ]
 
+binop = Ex.Infix (BinaryOp <$> op) Ex.AssocLeft
+unop = Ex.Prefix (UnaryOp <$> op)
+
 expr :: Parser Expr
-expr =  Ex.buildExpressionParser binops factor
+expr =  Ex.buildExpressionParser (binops ++ [[unop], [binop]]) factor
 
 variable :: Parser Expr
 variable = Var <$> identifier
@@ -89,12 +99,35 @@ factor = try floating
       <|> try variable
       <|> try ifthen
       <|> try for
-      <|> (parens expr)
+      <|> parens expr
 
 defn :: Parser Expr
 defn = try extern
     <|> try function
+    <|> try binaryDef
+    <|> try unaryDef
     <|> expr
+
+binaryDef :: Parser Expr
+binaryDef = do
+  reserved "def"
+  reserved "binary"
+  o <- op
+  prec <- int
+  args <- parens $ commaSep identifier
+  reservedOp "="
+  body <- expr
+  return $ BinaryDef o args body
+
+unaryDef :: Parser Expr
+unaryDef = do
+  reserved "def"
+  reserved "unary"
+  o <- op
+  arg <- parens identifier
+  reservedOp "="
+  body <- expr
+  return $ UnaryDef o arg body
 
 contents :: Parser a -> Parser a
 contents p = do

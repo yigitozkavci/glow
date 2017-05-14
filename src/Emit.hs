@@ -48,6 +48,12 @@ codegenTop (S.Extern name args) =
   external double name fnargs
   where fnargs = toSig args
 
+codegenTop (S.BinaryDef name args body) =
+  codegenTop $ S.Function ("binary" ++ name) args body
+
+codegenTop (S.UnaryDef name arg body) =
+  codegenTop $ S.Function ("unary" ++ name) [arg] body
+
 codegenTop exp =
   define double "main" [] blks
   where
@@ -55,6 +61,8 @@ codegenTop exp =
       entry <- addBlock entryBlockName
       setBlock entry
       cgen exp >>= ret
+
+
 
 -------------------------------------------------------------------------------
 -- Operations
@@ -75,20 +83,11 @@ binops = Map.fromList [
   ]
 
 cgen :: S.Expr -> Codegen AST.Operand
-cgen (S.UnaryOp op a) = do
-  cgen $ S.Call ("unary" ++ op) [a]
 cgen (S.BinaryOp "=" (S.Var var) val) = do
   a <- getvar var
   cval <- cgen val
   store a cval
   return cval
-cgen (S.BinaryOp op a b) = do
-  case Map.lookup op binops of
-    Just f  -> do
-      ca <- cgen a
-      cb <- cgen b
-      f ca cb
-    Nothing -> error "No such operator"
 cgen (S.Var x) = getvar x >>= load
 cgen (S.Float n) = return $ cons $ C.Float (F.Double n)
 cgen (S.Call fn args) = do
@@ -147,7 +146,15 @@ cgen (S.For ivar start cond step body) = do
   -- for.exit
   setBlock forexit
   return zero
-
+cgen (S.BinaryOp op a b) =
+  case Map.lookup op binops of
+    Just f -> do
+      ca <- cgen a
+      cb <- cgen b
+      f ca cb
+    Nothing -> cgen (S.Call ("binary" ++ op) [a, b])
+cgen (S.UnaryOp op a) =
+    cgen (S.Call ("unary" ++ op) [a])
 -------------------------------------------------------------------------------
 -- Compilation
 -------------------------------------------------------------------------------
