@@ -14,4 +14,5 @@ data Expr
   | For Name Expr Expr Expr Expr
   | BinaryDef Name [Name] Expr
   | UnaryDef Name Name Expr
+  | Let Name Expr Expr
   deriving (Eq, Ord, Show)

@@ -83,11 +83,6 @@ binops = Map.fromList [
   ]
 
 cgen :: S.Expr -> Codegen AST.Operand
-cgen (S.BinaryOp "=" (S.Var var) val) = do
-  a <- getvar var
-  cval <- cgen val
-  store a cval
-  return cval
 cgen (S.Var x) = getvar x >>= load
 cgen (S.Float n) = return $ cons $ C.Float (F.Double n)
 cgen (S.Call fn args) = do
@@ -146,6 +141,19 @@ cgen (S.For ivar start cond step body) = do
   -- for.exit
   setBlock forexit
   return zero
+cgen (S.UnaryOp op a) =
+    cgen (S.Call ("unary" ++ op) [a])
+cgen (S.Let a b c) = do
+  i <- alloca double
+  val <- cgen b
+  store i val
+  assign a i
+  cgen c
+cgen (S.BinaryOp "<-" (S.Var var) val) = do
+  a <- getvar var
+  cval <- cgen val
+  store a cval
+  return cval
 cgen (S.BinaryOp op a b) =
   case Map.lookup op binops of
     Just f -> do
@@ -153,8 +161,6 @@ cgen (S.BinaryOp op a b) =
       cb <- cgen b
       f ca cb
     Nothing -> cgen (S.Call ("binary" ++ op) [a, b])
-cgen (S.UnaryOp op a) =
-    cgen (S.Call ("unary" ++ op) [a])
 -------------------------------------------------------------------------------
 -- Compilation
 -------------------------------------------------------------------------------

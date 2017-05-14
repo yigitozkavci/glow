@@ -27,7 +27,9 @@ op = do
 
 binary s assoc = Ex.Infix (reservedOp s >> return (BinaryOp s)) assoc
 
-binops = [ [ binary "*" Ex.AssocLeft
+binops = [ [binary "<-" Ex.AssocLeft
+           ]
+         , [ binary "*" Ex.AssocLeft
            , binary "/" Ex.AssocLeft
            ]
          , [ binary "+" Ex.AssocLeft
@@ -99,6 +101,7 @@ factor = try floating
       <|> try call
       <|> try variable
       <|> try ifthen
+      <|> try letins
       <|> try for
       <|> parens expr
 
@@ -142,6 +145,18 @@ toplevel = many $ do
     def <- defn
     reservedOp ";"
     return def
+
+letins :: Parser Expr
+letins = do
+  reserved "var"
+  defs <- commaSep $ do
+    var <- identifier
+    reservedOp "<-"
+    val <- expr
+    return (var, val)
+  reserved "in"
+  body <- expr
+  return $ foldr (uncurry Let) body defs
 
 parseExpr :: String -> Either ParseError Expr
 parseExpr s = parse (contents expr) "<stdin>" s

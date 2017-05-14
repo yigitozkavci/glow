@@ -49,4 +49,9 @@ def fibo(v) =
   else
     fibo(v - 1) + fibo(v - 2);
 
-putchar(fibo(5));
+# Iterative fib.
+def fibi(x) =
+  var a <- 1, b <- 0 in
+  b <- (a + 1) :
+  b;
+fibi(10);
