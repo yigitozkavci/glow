@@ -5,6 +5,7 @@ module Emit where
 import LLVM.General.Module
 import LLVM.General.Context
 import LLVM.General.PassManager
+import LLVM.General.Transforms (Pass(PromoteMemoryToRegister))
 
 import qualified LLVM.General.AST as AST
 import qualified LLVM.General.AST.Constant as C
@@ -166,7 +167,7 @@ cgen (S.BinaryOp op a b) =
 -------------------------------------------------------------------------------
 
 passes :: PassSetSpec
-passes = defaultCuratedPassSetSpec { optLevel = Just 3 }
+passes = defaultPassSetSpec { transforms = [PromoteMemoryToRegister] }
 
 foreign import ccall "dynamic" haskFun :: FunPtr (IO Double) -> IO Double
 
@@ -179,7 +180,7 @@ runJIT mod =
     jit context $ \executionEngine ->
       runExceptT $ withModuleFromAST context mod $ \m ->
         withPassManager passes $ \pm -> do
-          -- runPassManager pm m
+          runPassManager pm m
           optmod <- moduleAST m
           s <- moduleLLVMAssembly m
           putStrLn s
