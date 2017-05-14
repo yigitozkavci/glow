@@ -34,6 +34,7 @@ binops = [ [ binary "*" Ex.AssocLeft
            , binary "-" Ex.AssocLeft
            ]
          , [ binary "<" Ex.AssocLeft
+           , binary ">" Ex.AssocLeft
            ]
          ]
 
