@@ -18,6 +18,26 @@ int = do
 floating :: Parser Expr
 floating = Float <$> float
 
+character :: Parser Char
+character = noneOf "\\\""
+
+quotedCharacter :: Parser Expr
+quotedCharacter = do
+  char '\''
+  chr <- character
+  char '\''
+  return $ Chr chr
+
+quotedString :: Parser Expr
+quotedString = do
+  char '"'
+  str <- string
+  char '"'
+  return $ Str str
+
+string :: Parser String
+string = many character
+
 op :: Parser String
 op = do
   whitespace
@@ -98,6 +118,8 @@ call = do
 factor :: Parser Expr
 factor = try floating
       <|> try int
+      <|> try quotedChar
+      <|> try quotedString
       <|> try call
       <|> try variable
       <|> try ifthen
