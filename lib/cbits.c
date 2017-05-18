@@ -9,3 +9,9 @@ double putchard(double X) {
   fflush(stdout);
   return 0;
 }
+
+double putchars(char* cs) {
+  putchar(*cs);
+  putchar(*(cs + 1));
+  return 0;
+}

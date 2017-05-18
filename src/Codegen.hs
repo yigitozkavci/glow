@@ -265,7 +265,7 @@ alloca ty = instr ty $ Alloca ty Nothing 0 []
 store :: Operand -> Operand -> Codegen Operand
 store ptr val =
   if oType ptr == oType val then
-    instr ty1 $ Store False ptr val Nothing 0 []
+    instr (oType ptr) $ Store False ptr val Nothing 0 []
   else
     error "Store instruction operands should have the same type"
 
@@ -288,5 +288,5 @@ ret val = terminator $ Do $ Ret (Just val) []
 -- Get type of the operand
 oType :: Operand -> Type
 oType (LocalReference oType' _) = oType'
-oType (ConstantOperand (C.Array oType' _)) = oType'
-oType _ = error "Undefined type of operator"
+oType (ConstantOperand (C.Float _)) = double
+oType operand = error $ "Undefined type of operand: " ++ show operand

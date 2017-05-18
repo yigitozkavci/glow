@@ -41,7 +41,7 @@ codegenTop (S.Function name args body) =
       setBlock entry
       forM_ args $ \a -> do
         var <- alloca double
-        store var (local (AST.Name a))
+        store var (local double (AST.Name a))
         assign a var
       cgen body >>= ret
 
@@ -86,6 +86,8 @@ binops = Map.fromList [
 cgen :: S.Expr -> Codegen AST.Operand
 cgen (S.Var x) = getvar x >>= load
 cgen (S.Float n) = return $ cons $ C.Float (F.Double n)
+cgen (S.Array elems) =
+  return $ cons $ C.Array double (map (C.Float . F.Double) elems)
 cgen (S.Call fn args) = do
   largs <- mapM cgen args
   call (externf (AST.Name fn)) largs
@@ -162,6 +164,7 @@ cgen (S.BinaryOp op a b) =
       cb <- cgen b
       f ca cb
     Nothing -> cgen (S.Call ("binary" ++ op) [a, b])
+cgen other = error $ "Code generation for " ++ show other ++ " is not defined."
 -------------------------------------------------------------------------------
 -- Compilation
 -------------------------------------------------------------------------------

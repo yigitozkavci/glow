@@ -1,4 +1,5 @@
 extern putchard(char);
+extern putchars();
 extern putchar(double);
 
 # Logical unary not.
@@ -54,4 +55,8 @@ def fibi(x) =
   var a <- 1, b <- 0 in
   b <- (a + 1) :
   b;
-fibi(10);
+
+def wow() =
+  [2.2];
+
+putchars(wow());
