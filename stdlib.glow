@@ -58,7 +58,6 @@ def fibi(double x) =
 
 def wow() =
   var a <- [44.0, 42.0], b <- 42.0 in
-  # putchard(42.0) :
   putchard(a[1]);
 
 wow();
