@@ -9,6 +9,7 @@ import qualified Text.Parsec.Token as Tok
 
 import Lexer
 import Syntax
+import Data.Word (Word32)
 
 int :: Parser Expr
 int = do
@@ -18,9 +19,20 @@ int = do
 array :: Parser Expr
 array = do
   char '['
+  whitespace
   ints <- commaSep float
+  whitespace
   char ']'
+  whitespace
   return $ Array ints
+
+arrAccess :: Parser Expr
+arrAccess = do
+  var <- identifier
+  char '['
+  index <- integer
+  char ']'
+  return $ ArrAccess var (fromInteger index)
 
 floating :: Parser Expr
 floating = Float <$> float
@@ -34,7 +46,7 @@ op = do
 
 binary s assoc = Ex.Infix (reservedOp s >> return (BinaryOp s)) assoc
 
-binops = [ [binary "<-" Ex.AssocLeft
+binops = [ [ binary "<-" Ex.AssocLeft
            ]
          , [ binary "*" Ex.AssocLeft
            , binary "/" Ex.AssocLeft
@@ -56,11 +68,18 @@ expr =  Ex.buildExpressionParser (binops ++ [[unop], [binop]]) factor
 variable :: Parser Expr
 variable = Var <$> identifier
 
+typedIdentifier :: Parser TypedName
+typedIdentifier = do
+  typeDecl <- identifier
+  whitespace
+  var <- identifier
+  return $ Typed typeDecl var
+
 function :: Parser Expr
 function = do
   reserved "def"
   name <- identifier
-  args <- parens $ commaSep identifier
+  args <- parens $ commaSep typedIdentifier
   reservedOp "="
   body <- expr
   return $ Function name args body
@@ -103,9 +122,10 @@ call = do
   return $ Call name args
 
 factor :: Parser Expr
-factor = try floating
+factor = try array
+      <|> try floating
       <|> try int
-      <|> try array
+      <|> try arrAccess
       <|> try call
       <|> try variable
       <|> try ifthen
@@ -126,7 +146,7 @@ binaryDef = do
   reserved "binary"
   o <- op
   prec <- int
-  args <- parens $ commaSep identifier
+  args <- parens $ commaSep typedIdentifier
   reservedOp "="
   body <- expr
   return $ BinaryDef o args body
@@ -136,7 +156,7 @@ unaryDef = do
   reserved "def"
   reserved "unary"
   o <- op
-  arg <- parens identifier
+  arg <- parens typedIdentifier
   reservedOp "="
   body <- expr
   return $ UnaryDef o arg body

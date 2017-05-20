@@ -1,24 +1,24 @@
-extern putchard(char);
+extern putchard(x);
 extern putchars();
 extern putchar(double);
 
 # Logical unary not.
-def unary!(v) =
+def unary!(double v) =
   if v then
     0
   else
     1;
 
 # Unary negate.
-def unary-(v) =
+def unary-(double v) =
   0-v;
 
 # Define > with the same precedence as <.
-def binary> 10 (LHS, RHS) =
+def binary> 10 (double LHS, double RHS) =
   RHS < LHS;
 
 # Binary logical or, which does not short circuit.
-def binary| 13 (LHS, RHS) =
+def binary| 13 (double LHS, double RHS) =
   if LHS then
     1
   else if RHS then
@@ -27,22 +27,22 @@ def binary| 13 (LHS, RHS) =
     0;
 
 # Binary logical and, which does not short circuit.
-def binary& 6 (LHS, RHS) =
+def binary& 6 (double LHS, double RHS) =
   if !LHS then
     0
   else
     !(!RHS);
 
 # Define = with slightly lower precedence than relationals.
-def binary == 9 (LHS, RHS) =
+def binary == 9 (double LHS, double RHS) =
   !(LHS < RHS | LHS > RHS);
 
 # Define ':' for sequencing: as a low-precedence operator that ignores operands
 # and just returns the RHS.
-def binary : 1 (x, y) =
+def binary : 1 (double x, double y) =
   y;
 
-def fibo(v) =
+def fibo(double v) =
   if v == 0 then
     0
   else if v == 1 then
@@ -51,12 +51,15 @@ def fibo(v) =
     fibo(v - 1) + fibo(v - 2);
 
 # Iterative fib.
-def fibi(x) =
+def fibi(double x) =
   var a <- 1, b <- 0 in
   b <- (a + 1) :
   b;
 
 def wow() =
-  [2.2];
+  var a <- [44.0, 42.0], b <- 42.0 in
+  # putchard(42.0) :
+  putchard(a[1]);
 
-putchars(wow());
+wow();
+# putchard(42);

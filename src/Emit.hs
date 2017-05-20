@@ -8,6 +8,7 @@ import LLVM.General.PassManager
 import LLVM.General.Transforms (Pass(PromoteMemoryToRegister))
 
 import qualified LLVM.General.AST as AST
+import qualified LLVM.General.AST.Instruction as I
 import qualified LLVM.General.AST.Constant as C
 import qualified LLVM.General.AST.Float as F
 import qualified LLVM.General.AST.FloatingPointPredicate as FP
@@ -28,8 +29,23 @@ zero = cons $ C.Float (F.Double 0.0)
 true = one
 false = zero
 
-toSig :: [String] -> [(AST.Type, AST.Name)]
-toSig = map (\x -> (double, AST.Name x))
+toSig :: [S.TypedName] -> [(AST.Type, AST.Name)]
+toSig = map (\(S.Typed type' name) -> (getType type', AST.Name name))
+
+toDoubleSig :: [String] -> [(AST.Type, AST.Name)]
+toDoubleSig = map (\x -> (double, AST.Name x))
+
+getType :: String -> AST.Type
+getType "double" = double
+getType "array" = ptr double
+getType x = error $ "Type " ++ show x ++ " is not recognised."
+
+processArg :: S.TypedName -> Codegen ()
+processArg (S.Typed rawType name) = do
+  let argType = getType rawType
+  var <- alloca argType
+  store var (local argType (AST.Name name))
+  assign name var
 
 codegenTop :: S.Expr -> LLVM ()
 codegenTop (S.Function name args body) =
@@ -39,15 +55,12 @@ codegenTop (S.Function name args body) =
     bls = createBlocks $ execCodegen $ do
       entry <- addBlock entryBlockName
       setBlock entry
-      forM_ args $ \a -> do
-        var <- alloca double
-        store var (local double (AST.Name a))
-        assign a var
+      forM_ args processArg
       cgen body >>= ret
 
 codegenTop (S.Extern name args) =
   external double name fnargs
-  where fnargs = toSig args
+  where fnargs = toDoubleSig args
 
 codegenTop (S.BinaryDef name args body) =
   codegenTop $ S.Function ("binary" ++ name) args body
@@ -86,8 +99,16 @@ binops = Map.fromList [
 cgen :: S.Expr -> Codegen AST.Operand
 cgen (S.Var x) = getvar x >>= load
 cgen (S.Float n) = return $ cons $ C.Float (F.Double n)
-cgen (S.Array elems) =
-  return $ cons $ C.Array double (map (C.Float . F.Double) elems)
+cgen (S.Array elems) = do
+  let arr = cons $ C.Array double (map (C.Float . F.Double) elems)
+  indice <- cgen (S.Float 0.0)
+  instr doublePtr $ I.GetElementPtr True arr [indice] []
+
+cgen (S.ArrAccess var index) = do
+  arrOperand <- getvar var
+  let indice = cons $ C.Int 32 (toInteger index)
+  pointer <- instr double $ I.GetElementPtr True arrOperand [cons $ C.Int 32 (toInteger 0), indice] []
+  load pointer
 cgen (S.Call fn args) = do
   largs <- mapM cgen args
   call (externf (AST.Name fn)) largs
@@ -146,9 +167,15 @@ cgen (S.For ivar start cond step body) = do
   return zero
 cgen (S.UnaryOp op a) =
     cgen (S.Call ("unary" ++ op) [a])
-cgen (S.Let a b c) = do
-  i <- alloca double
+cgen (S.Let a b@(S.Array elems) c) = do
   val <- cgen b
+  i <- alloca (AST.ArrayType (fromIntegral . length $ elems) double)
+  store i val
+  assign a i
+  cgen c
+cgen (S.Let a b c) = do
+  val <- cgen b
+  i <- alloca (oType val)
   store i val
   assign a i
   cgen c

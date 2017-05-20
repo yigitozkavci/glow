@@ -14,6 +14,7 @@ import Control.Applicative
 
 import LLVM.General.AST
 import LLVM.General.AST.Global
+import LLVM.General.AST.AddrSpace (AddrSpace (..))
 import qualified LLVM.General.AST as AST
 
 import qualified LLVM.General.AST.Constant as C
@@ -65,11 +66,19 @@ external retty label argtys = addDefn $
 double :: Type
 double = FloatingPointType 64 IEEE
 
+-- Array type.
 array :: Word64 -> Type -> Type
 array nArrayElements elementType = ArrayType
   { nArrayElements = nArrayElements
   , elementType = elementType
   }
+
+-- Pointer type. We will always use 0 as the pointer space, so this is acting like a helper.
+ptr :: Type -> Type
+ptr t = PointerType t $ AddrSpace 0
+
+doublePtr :: Type
+doublePtr = ptr double
 
 -------------------------------------------------------------------------------
 -- Names
@@ -246,6 +255,11 @@ fdiv a b = instr double $ FDiv NoFastMathFlags a b []
 fcmp :: FP.FloatingPointPredicate -> Operand -> Operand -> Codegen Operand
 fcmp cond a b = instr double $ FCmp cond a b [] -- Update this if in the future we can compare strings
 
+-- For now, it only extracts one level of nesting for indexes:
+-- a[3] is allowed, but a[4][2] is not allowed.
+extract :: Operand -> Word32 -> Codegen Operand
+extract arr index = instr double $ ExtractValue arr [index] []
+
 cons :: C.Constant -> Operand
 cons = ConstantOperand
 
@@ -263,11 +277,9 @@ alloca :: Type -> Codegen Operand
 alloca ty = instr ty $ Alloca ty Nothing 0 []
 
 store :: Operand -> Operand -> Codegen Operand
-store ptr val =
-  if oType ptr == oType val then
-    instr (oType ptr) $ Store False ptr val Nothing 0 []
-  else
-    error "Store instruction operands should have the same type"
+store dest src =
+  instr VoidType $ Store False dest src Nothing 0 []
+  -- error $ "Store instruction operands should have the same type.\nSource type: " ++ show (oType src) ++ "\nDestination type: " ++ show (oType dest)
 
 load :: Operand -> Codegen Operand
 load ptr = instr (oType ptr) $ Load False ptr Nothing 0 []
@@ -289,4 +301,5 @@ ret val = terminator $ Do $ Ret (Just val) []
 oType :: Operand -> Type
 oType (LocalReference oType' _) = oType'
 oType (ConstantOperand (C.Float _)) = double
+oType (ConstantOperand (C.Array memType vals)) = array (fromIntegral $ length vals) memType
 oType operand = error $ "Undefined type of operand: " ++ show operand
