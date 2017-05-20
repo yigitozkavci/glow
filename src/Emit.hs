@@ -45,7 +45,8 @@ processArg (S.Typed rawType name) = do
   let argType = getType rawType
   var <- alloca argType
   store var (local argType (AST.Name name))
-  assign name var
+  pointer <- load var
+  assign name pointer
 
 codegenTop :: S.Expr -> LLVM ()
 codegenTop (S.Function name args body) =
@@ -96,18 +97,22 @@ binops = Map.fromList [
     , ("<", lt)
   ]
 
+intOperand :: Integer -> AST.Operand
+intOperand val = cons $ C.Int 32 $ toInteger val
+
 cgen :: S.Expr -> Codegen AST.Operand
 cgen (S.Var x) = getvar x >>= load
 cgen (S.Float n) = return $ cons $ C.Float (F.Double n)
 cgen (S.Array elems) = do
+  i <- alloca (array (fromIntegral . length $ elems) double)
   let arr = cons $ C.Array double (map (C.Float . F.Double) elems)
-  indice <- cgen (S.Float 0.0)
-  instr doublePtr $ I.GetElementPtr True arr [indice] []
+  store i arr
+  instr doublePtr $ I.GetElementPtr True i [intOperand 0, intOperand 0] []
 
 cgen (S.ArrAccess var index) = do
   arrOperand <- getvar var
   let indice = cons $ C.Int 32 (toInteger index)
-  pointer <- instr double $ I.GetElementPtr True arrOperand [cons $ C.Int 32 (toInteger 0), indice] []
+  pointer <- instr double $ I.GetElementPtr True arrOperand [indice] []
   load pointer
 cgen (S.Call fn args) = do
   largs <- mapM cgen args
@@ -169,9 +174,10 @@ cgen (S.UnaryOp op a) =
     cgen (S.Call ("unary" ++ op) [a])
 cgen (S.Let a b@(S.Array elems) c) = do
   val <- cgen b
-  i <- alloca (AST.ArrayType (fromIntegral . length $ elems) double)
+  i <- alloca (ptr double)
   store i val
-  assign a i
+  pointer <- load i
+  assign a pointer
   cgen c
 cgen (S.Let a b c) = do
   val <- cgen b
@@ -197,7 +203,7 @@ cgen other = error $ "Code generation for " ++ show other ++ " is not defined."
 -------------------------------------------------------------------------------
 
 passes :: PassSetSpec
-passes = defaultPassSetSpec { transforms = [PromoteMemoryToRegister] }
+passes = defaultPassSetSpec
 
 foreign import ccall "dynamic" haskFun :: FunPtr (IO Double) -> IO Double
 
@@ -210,7 +216,6 @@ runJIT mod =
     jit context $ \executionEngine ->
       runExceptT $ withModuleFromAST context mod $ \m ->
         withPassManager passes $ \pm -> do
-          runPassManager pm m
           optmod <- moduleAST m
           s <- moduleLLVMAssembly m
           putStrLn s
