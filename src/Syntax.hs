@@ -1,5 +1,6 @@
 module Syntax where
 import Data.Word (Word32)
+import Data.Char (Char)
 
 type Name = String
 
@@ -14,6 +15,7 @@ data Expr
   = Float Double
   | Array [Double]
   | ArrAccess Name Word32
+  | Char Char
   | Var String
   | Call Name [Expr]
   | Function Name [TypedName] Expr

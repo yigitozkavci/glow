@@ -26,6 +26,13 @@ array = do
   whitespace
   return $ Array ints
 
+character :: Parser Expr
+character = do
+  char '\''
+  c <- anyChar
+  char '\''
+  return $ Char c
+
 arrAccess :: Parser Expr
 arrAccess = do
   var <- identifier
