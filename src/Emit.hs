@@ -30,19 +30,14 @@ true = one
 false = zero
 
 toSig :: [S.TypedName] -> [(AST.Type, AST.Name)]
-toSig = map (\(S.Typed type' name) -> (getType type', AST.Name name))
+toSig = map (\(S.TypedName type' name) -> (S.declToType type', AST.Name name))
 
 toDoubleSig :: [String] -> [(AST.Type, AST.Name)]
 toDoubleSig = map (\x -> (double, AST.Name x))
 
-getType :: String -> AST.Type
-getType "double" = double
-getType "array" = ptr double
-getType x = error $ "Type " ++ show x ++ " is not recognised."
-
 processArg :: S.TypedName -> Codegen ()
-processArg (S.Typed rawType name) = do
-  let argType = getType rawType
+processArg (S.TypedName rawType name) = do
+  let argType = S.declToType rawType
   var <- alloca argType
   store var (local argType (AST.Name name))
   pointer <- load var

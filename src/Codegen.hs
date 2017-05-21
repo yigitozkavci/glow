@@ -80,6 +80,8 @@ ptr t = PointerType t $ AddrSpace 0
 doublePtr :: Type
 doublePtr = ptr double
 
+char :: Type
+char = ptr double
 -------------------------------------------------------------------------------
 -- Names
 -------------------------------------------------------------------------------

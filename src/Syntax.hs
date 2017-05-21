@@ -1,14 +1,19 @@
 module Syntax where
 import Data.Word (Word32)
+import qualified LLVM.General.AST as AST
+import Codegen
 
 type Name = String
 
+data PrimType = DoublePrim
+              | CharPrim
+              deriving (Eq, Ord, Show)
+
 data TypeDecl = DoubleDecl
-              | ArrayDecl
+              | ArrayDecl PrimType
+              deriving (Eq, Ord, Show)
 
-data Typed a = Typed String a deriving (Eq, Ord, Show)
-
-type TypedName = Typed Name
+data TypedName = TypedName TypeDecl Name deriving (Eq, Ord, Show)
 
 data Expr
   = Float Double
@@ -26,3 +31,8 @@ data Expr
   | UnaryDef Name TypedName Expr
   | Let Name Expr Expr
   deriving (Eq, Ord, Show)
+
+declToType :: TypeDecl -> AST.Type
+declToType DoubleDecl = double
+declToType (ArrayDecl DoublePrim) = ptr double
+declToType (ArrayDecl CharPrim) = ptr char

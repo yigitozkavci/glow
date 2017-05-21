@@ -68,12 +68,31 @@ expr =  Ex.buildExpressionParser (binops ++ [[unop], [binop]]) factor
 variable :: Parser Expr
 variable = Var <$> identifier
 
+doubleDecl :: Parser TypeDecl
+doubleDecl = do
+  reserved "double"
+  return DoubleDecl
+
+doubleArrDecl :: Parser TypeDecl
+doubleArrDecl = do
+  reserved "double[]"
+  return $ ArrayDecl DoublePrim
+
+charArrDecl :: Parser TypeDecl
+charArrDecl = do
+  reserved "char[]"
+  return $ ArrayDecl CharPrim
+
+parseTypeDecl :: Parser TypeDecl
+parseTypeDecl = try doubleDecl
+             <|> doubleArrDecl
+
 typedIdentifier :: Parser TypedName
 typedIdentifier = do
-  typeDecl <- identifier
+  typeDecl <- parseTypeDecl
   whitespace
   var <- identifier
-  return $ Typed typeDecl var
+  return $ TypedName typeDecl var
 
 function :: Parser Expr
 function = do
