@@ -1,6 +1,6 @@
 extern putchard(x);
 # extern putchars();
-extern putchar(double);
+extern putchar(int);
 extern printint(int);
 
 # # Logical unary not.
@@ -61,9 +61,8 @@ extern printint(int);
 #   var a <- [1.0, 2.0] in
 #   a[0];
 
-def double wow1() =
-  var a <- [42.0, 46.0] in
-  a[0];
+def char wow1() =
+  'a';
 
 # def wow(array c) =
 #   var a <- [1.0, 2.0] in
@@ -71,4 +70,4 @@ def double wow1() =
 
 # wow([42.0, 46.0]);
 # wow1();
-putchard(wow1());
+putchar(wow1());

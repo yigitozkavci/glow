@@ -16,6 +16,13 @@ int = do
   n <- integer
   return $ Integer n
 
+character :: Parser Expr
+character = do
+  char '\''
+  c <- anyChar
+  char '\''
+  return $ Char c
+
 -- Given a parser for single element, parses the list of it
 array :: Parser a -> Parser [a]
 array parseElem = do
@@ -85,6 +92,11 @@ intDecl = do
   reserved "int"
   return IntDecl
 
+charDecl :: Parser TypeDecl
+charDecl = do
+  reserved "char"
+  return CharDecl
+
 doubleArrDecl :: Parser TypeDecl
 doubleArrDecl = do
   reserved "double[]"
@@ -103,6 +115,7 @@ intArrDecl = do
 parseTypeDecl :: Parser TypeDecl
 parseTypeDecl = try doubleDecl
              <|> try intDecl
+             <|> try charDecl
              <|> try doubleArrDecl
              <|> intArrDecl
 
@@ -165,6 +178,7 @@ factor = try doubleArray
       <|> try intArray
       <|> try floating
       <|> try int
+      <|> try character
       <|> try arrAccess
       <|> try call
       <|> try variable

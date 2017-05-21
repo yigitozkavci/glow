@@ -16,6 +16,7 @@ import qualified LLVM.General.AST.FloatingPointPredicate as FP
 import qualified LLVM.General.ExecutionEngine as EE
 import Data.Word
 import Data.Int
+import Data.Char (ord)
 import Control.Monad.Except
 import Control.Applicative
 import qualified Data.Map as Map
@@ -98,7 +99,11 @@ intOperand val = cons $ C.Int 32 $ toInteger val
 cgen :: S.Expr -> Codegen AST.Operand
 
 -- Types
-cgen (S.Float n) = return $ cons $ C.Float (F.Double n)
+cgen (S.Float f) = return $ cons $ C.Float (F.Double f)
+
+cgen (S.Integer val) = return $ cons $ C.Int 32 val
+
+cgen (S.Char c) = return $ cons $ C.Int 32 (toInteger $ ord c)
 
 cgen (S.DoubleArray elems) = do
   i <- alloca (array (fromIntegral . length $ elems) double)
@@ -111,8 +116,6 @@ cgen (S.IntArray elems) = do
   let arr = cons $ C.Array int (map (C.Int 32) elems)
   store i arr
   instr intPtr $ I.GetElementPtr True i [intOperand 0, intOperand 0] []
-
-cgen (S.Integer val) = return $ cons $ C.Int 32 val
 
 -- Memory
 cgen (S.Var x) = getvar x >>= load
@@ -183,6 +186,7 @@ cgen (S.For ivar start cond step body) = do
   setBlock forexit
   return zero
 
+-- TODO: Fix these let declarations. They contain duplication
 cgen (S.Let a b@(S.DoubleArray elems) c) = do
   val <- cgen b
   i <- alloca (ptr double)

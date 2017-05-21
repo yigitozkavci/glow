@@ -1,4 +1,5 @@
 module Syntax where
+
 import Data.Word (Word32)
 import qualified LLVM.General.AST as AST
 import Codegen
@@ -11,6 +12,7 @@ data PrimType = DoublePrim
 
 data TypeDecl = DoubleDecl
               | IntDecl
+              | CharDecl
               | ArrayDecl PrimType
               deriving (Eq, Ord, Show)
 
@@ -19,6 +21,7 @@ data TypedName = TypedName TypeDecl Name deriving (Eq, Ord, Show)
 data Expr
   = Float Double
   | Integer Integer
+  | Char Char
   | IntArray [Integer]
   | DoubleArray [Double]
   | ArrAccess Name Word32
@@ -38,5 +41,6 @@ data Expr
 declToType :: TypeDecl -> AST.Type
 declToType DoubleDecl = double
 declToType IntDecl = int
+declToType CharDecl = int
 declToType (ArrayDecl DoublePrim) = ptr double
 declToType (ArrayDecl IntPrim) = ptr int
