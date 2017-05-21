@@ -28,7 +28,7 @@ data Expr
   | Var String
   | Call Name [Expr]
   | Function TypeDecl Name [TypedName] Expr
-  | Extern Name [Name]
+  | Extern TypeDecl Name [TypedName]
   | BinaryOp Name Expr Expr
   | UnaryOp Name Expr
   | If Expr Expr Expr

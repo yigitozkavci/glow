@@ -1,7 +1,7 @@
-extern putchard(x);
+extern double putchard(double i);
 # extern putchars();
-extern putchar(int);
-extern printint(int);
+# extern int putchar(int i);
+extern int printint(int i);
 
 # # Logical unary not.
 # def unary!(double v) =
@@ -40,7 +40,7 @@ extern printint(int);
 
 # # Define ':' for sequencing: as a low-precedence operator that ignores operands
 # # and just returns the RHS.
-# def binary : 1 (double x, double y) =
+# def int binary : 1 (int x, int y) =
 #   y;
 
 # def fibo(double v) =
@@ -62,7 +62,7 @@ extern printint(int);
 #   a[0];
 
 def char wow1() =
-  'a';
+  printint('\');
 
 # def wow(array c) =
 #   var a <- [1.0, 2.0] in
@@ -70,4 +70,4 @@ def char wow1() =
 
 # wow([42.0, 46.0]);
 # wow1();
-putchar(wow1());
+wow1();

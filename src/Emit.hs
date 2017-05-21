@@ -55,9 +55,9 @@ codegenTop (S.Function typeDecl name args body) =
       forM_ args processArg
       cgen body >>= ret
 
-codegenTop (S.Extern name args) =
-  external double name fnargs
-  where fnargs = toDoubleSig args
+codegenTop (S.Extern typeDecl name args) =
+  external (S.declToType typeDecl) name fnargs
+  where fnargs = toSig args
 
 codegenTop (S.BinaryDef typeDecl name args body) =
   codegenTop $ S.Function typeDecl ("binary" ++ name) args body

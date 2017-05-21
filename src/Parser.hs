@@ -139,9 +139,10 @@ function = do
 extern :: Parser Expr
 extern = do
   reserved "extern"
+  typeDecl <- parseTypeDecl
   name <- identifier
-  args <- parens $ many identifier
-  return $ Extern name args
+  args <- parens $ commaSep typedIdentifier
+  return $ Extern typeDecl name args
 
 ifthen :: Parser Expr
 ifthen = do
