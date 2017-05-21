@@ -215,7 +215,7 @@ cgen other = error $ "Code generation for " ++ show other ++ " is not defined."
 -------------------------------------------------------------------------------
 
 passes :: PassSetSpec
-passes = defaultPassSetSpec
+passes = defaultPassSetSpec { transforms = [PromoteMemoryToRegister] }
 
 foreign import ccall "dynamic" haskFun :: FunPtr (IO Double) -> IO Double
 
@@ -228,6 +228,7 @@ runJIT mod =
     jit context $ \executionEngine ->
       runExceptT $ withModuleFromAST context mod $ \m ->
         withPassManager passes $ \pm -> do
+          runPassManager pm m
           optmod <- moduleAST m
           s <- moduleLLVMAssembly m
           putStrLn s
