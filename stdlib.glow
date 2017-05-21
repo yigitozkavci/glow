@@ -61,9 +61,9 @@ extern printint(int);
 #   var a <- [1.0, 2.0] in
 #   a[0];
 
-def int wow1() =
-  var a <- 42 in
-  a;
+def double wow1() =
+  var a <- [42.0, 46.0] in
+  a[0];
 
 # def wow(array c) =
 #   var a <- [1.0, 2.0] in
@@ -71,4 +71,4 @@ def int wow1() =
 
 # wow([42.0, 46.0]);
 # wow1();
-printint(wow1());
+putchard(wow1());

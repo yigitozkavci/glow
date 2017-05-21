@@ -6,7 +6,6 @@ import Codegen
 type Name = String
 
 data PrimType = DoublePrim
-              | CharPrim
               | IntPrim
               deriving (Eq, Ord, Show)
 
@@ -20,7 +19,8 @@ data TypedName = TypedName TypeDecl Name deriving (Eq, Ord, Show)
 data Expr
   = Float Double
   | Integer Integer
-  | Array [Double]
+  | IntArray [Integer]
+  | DoubleArray [Double]
   | ArrAccess Name Word32
   | Var String
   | Call Name [Expr]
@@ -39,4 +39,4 @@ declToType :: TypeDecl -> AST.Type
 declToType DoubleDecl = double
 declToType IntDecl = int
 declToType (ArrayDecl DoublePrim) = ptr double
-declToType (ArrayDecl CharPrim) = ptr char
+declToType (ArrayDecl IntPrim) = ptr int

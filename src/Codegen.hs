@@ -62,9 +62,15 @@ external retty label argtys = addDefn $
 -- Types
 -------------------------------------------------------------------------------
 
--- IEEE 754 double
+-- Primitives
 double :: Type
 double = FloatingPointType 64 IEEE
+
+char :: Type
+char = ptr double
+
+int :: Type
+int = IntegerType 32
 
 -- Array type.
 array :: Word64 -> Type -> Type
@@ -77,14 +83,14 @@ array nArrayElements elementType = ArrayType
 ptr :: Type -> Type
 ptr t = PointerType t $ AddrSpace 0
 
+
+-- Primitive pointers
 doublePtr :: Type
 doublePtr = ptr double
 
-char :: Type
-char = ptr double
+intPtr :: Type
+intPtr = ptr int
 
-int :: Type
-int = IntegerType 32
 -------------------------------------------------------------------------------
 -- Names
 -------------------------------------------------------------------------------

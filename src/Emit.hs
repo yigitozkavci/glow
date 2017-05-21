@@ -100,11 +100,17 @@ cgen :: S.Expr -> Codegen AST.Operand
 -- Types
 cgen (S.Float n) = return $ cons $ C.Float (F.Double n)
 
-cgen (S.Array elems) = do
+cgen (S.DoubleArray elems) = do
   i <- alloca (array (fromIntegral . length $ elems) double)
   let arr = cons $ C.Array double (map (C.Float . F.Double) elems)
   store i arr
   instr doublePtr $ I.GetElementPtr True i [intOperand 0, intOperand 0] []
+
+cgen (S.IntArray elems) = do
+  i <- alloca (array (fromIntegral . length $ elems) int)
+  let arr = cons $ C.Array int (map (C.Int 32) elems)
+  store i arr
+  instr intPtr $ I.GetElementPtr True i [intOperand 0, intOperand 0] []
 
 cgen (S.Integer val) = return $ cons $ C.Int 32 val
 
@@ -177,9 +183,17 @@ cgen (S.For ivar start cond step body) = do
   setBlock forexit
   return zero
 
-cgen (S.Let a b@(S.Array elems) c) = do
+cgen (S.Let a b@(S.DoubleArray elems) c) = do
   val <- cgen b
   i <- alloca (ptr double)
+  store i val
+  pointer <- load i
+  assign a pointer
+  cgen c
+
+cgen (S.Let a b@(S.IntArray elems) c) = do
+  val <- cgen b
+  i <- alloca (ptr int)
   store i val
   pointer <- load i
   assign a pointer

@@ -16,15 +16,26 @@ int = do
   n <- integer
   return $ Integer n
 
-array :: Parser Expr
-array = do
+-- Given a parser for single element, parses the list of it
+array :: Parser a -> Parser [a]
+array parseElem = do
   char '['
   whitespace
-  ints <- commaSep float
+  vals <- commaSep parseElem
   whitespace
   char ']'
   whitespace
-  return $ Array ints
+  return $ vals
+
+doubleArray :: Parser Expr
+doubleArray = do
+  vals <- array float
+  return $ DoubleArray vals
+
+intArray :: Parser Expr
+intArray = do
+  vals <- array integer
+  return $ IntArray vals
 
 arrAccess :: Parser Expr
 arrAccess = do
@@ -83,15 +94,21 @@ doubleArrDecl = do
   reserved "double[]"
   return $ ArrayDecl DoublePrim
 
-charArrDecl :: Parser TypeDecl
-charArrDecl = do
-  reserved "char[]"
-  return $ ArrayDecl CharPrim
+intArrDecl :: Parser TypeDecl
+intArrDecl = do
+  reserved "int[]"
+  return $ ArrayDecl IntPrim
+
+-- charArrDecl :: Parser TypeDecl
+-- charArrDecl = do
+--   reserved "char[]"
+--   return $ ArrayDecl CharPrim
 
 parseTypeDecl :: Parser TypeDecl
 parseTypeDecl = try doubleDecl
              <|> try intDecl
-             <|> doubleArrDecl
+             <|> try doubleArrDecl
+             <|> intArrDecl
 
 typedIdentifier :: Parser TypedName
 typedIdentifier = do
@@ -148,7 +165,8 @@ call = do
   return $ Call name args
 
 factor :: Parser Expr
-factor = try array
+factor = try doubleArray
+      <|> try intArray
       <|> try floating
       <|> try int
       <|> try arrAccess
