@@ -34,11 +34,20 @@ array parseElem = do
   whitespace
   return vals
 
-doubleArray :: Parser Expr
-doubleArray = DoubleArray <$> array float
-
 intArray :: Parser Expr
 intArray = IntArray <$> array integer
+
+charArray :: Parser Expr
+charArray = CharArray <$> array singleChar
+  where singleChar :: Parser Char -- TODO: This is ugly, needs fix
+        singleChar = do
+          char '\''
+          c <- anyChar
+          char '\''
+          return c
+
+doubleArray :: Parser Expr
+doubleArray = DoubleArray <$> array float
 
 arrAccess :: Parser Expr
 arrAccess = do
@@ -175,8 +184,9 @@ call = do
   return $ Call name args
 
 factor :: Parser Expr
-factor = try doubleArray
-      <|> try intArray
+factor = try intArray
+      <|> try charArray
+      <|> try doubleArray
       <|> try floating
       <|> try int
       <|> try character

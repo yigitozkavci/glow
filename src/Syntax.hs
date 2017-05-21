@@ -8,6 +8,7 @@ type Name = String
 
 data PrimType = DoublePrim
               | IntPrim
+              | CharPrim
               deriving (Eq, Ord, Show)
 
 data TypeDecl = DoubleDecl
@@ -24,6 +25,7 @@ data Expr
   | Char Char
   | IntArray [Integer]
   | DoubleArray [Double]
+  | CharArray [Char] -- TODO: Possible duplication elimination: use Expr
   | ArrAccess Name Word32
   | Var String
   | Call Name [Expr]
@@ -44,3 +46,4 @@ declToType IntDecl = int
 declToType CharDecl = int
 declToType (ArrayDecl DoublePrim) = ptr double
 declToType (ArrayDecl IntPrim) = ptr int
+declToType (ArrayDecl CharPrim) = ptr int

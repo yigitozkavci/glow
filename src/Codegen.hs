@@ -63,14 +63,14 @@ external retty label argtys = addDefn $
 -------------------------------------------------------------------------------
 
 -- Primitives
-double :: Type
-double = FloatingPointType 64 IEEE
-
-char :: Type
-char = ptr double
-
 int :: Type
 int = IntegerType 32
+
+char :: Type
+char = int -- In LLVM, char is represented with plain integers
+
+double :: Type
+double = FloatingPointType 64 IEEE
 
 -- Array type.
 array :: Word64 -> Type -> Type
@@ -82,14 +82,6 @@ array nArrayElements elementType = ArrayType
 -- Pointer type. We will always use 0 as the pointer space, so this is acting like a helper.
 ptr :: Type -> Type
 ptr t = PointerType t $ AddrSpace 0
-
-
--- Primitive pointers
-doublePtr :: Type
-doublePtr = ptr double
-
-intPtr :: Type
-intPtr = ptr int
 
 -------------------------------------------------------------------------------
 -- Names

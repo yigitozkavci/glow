@@ -105,17 +105,24 @@ cgen (S.Integer val) = return $ cons $ C.Int 32 val
 
 cgen (S.Char c) = return $ cons $ C.Int 32 (toInteger $ ord c)
 
-cgen (S.DoubleArray elems) = do
-  i <- alloca (array (fromIntegral . length $ elems) double)
-  let arr = cons $ C.Array double (map (C.Float . F.Double) elems)
-  store i arr
-  instr doublePtr $ I.GetElementPtr True i [intOperand 0, intOperand 0] []
-
+-- TODO: Contains duplication, needs fix
 cgen (S.IntArray elems) = do
   i <- alloca (array (fromIntegral . length $ elems) int)
   let arr = cons $ C.Array int (map (C.Int 32) elems)
   store i arr
-  instr intPtr $ I.GetElementPtr True i [intOperand 0, intOperand 0] []
+  instr (ptr int) $ I.GetElementPtr True i [intOperand 0, intOperand 0] []
+
+cgen (S.CharArray elems) = do
+  i <- alloca (array (fromIntegral . length $ elems) char)
+  let arr = cons $ C.Array char (map (C.Int 32 . toInteger . ord) elems)
+  store i arr
+  instr (ptr char) $ I.GetElementPtr True i [intOperand 0, intOperand 0] []
+
+cgen (S.DoubleArray elems) = do
+  i <- alloca (array (fromIntegral . length $ elems) double)
+  let arr = cons $ C.Array double (map (C.Float . F.Double) elems)
+  store i arr
+  instr (ptr double) $ I.GetElementPtr True i [intOperand 0, intOperand 0] []
 
 -- Memory
 cgen (S.Var x) = getvar x >>= load
@@ -203,8 +210,13 @@ cgen (S.Let a b@(S.IntArray elems) c) = do
   assign a pointer
   cgen c
 
-cgen (S.UnaryOp op a) =
-    cgen (S.Call ("unary" ++ op) [a])
+cgen (S.Let a b@(S.CharArray elems) c) = do
+  val <- cgen b
+  i <- alloca (ptr char)
+  store i val
+  pointer <- load i
+  assign a pointer
+  cgen c
 
 cgen (S.Let a b c) = do
   val <- cgen b
@@ -212,6 +224,9 @@ cgen (S.Let a b c) = do
   store i val
   assign a i
   cgen c
+
+cgen (S.UnaryOp op a) =
+    cgen (S.Call ("unary" ++ op) [a])
 
 cgen (S.BinaryOp "<-" (S.Var var) val) = do
   a <- getvar var
