@@ -15,3 +15,9 @@ double putchars(char* cs) {
   putchar(*(cs + 1));
   return 0;
 }
+
+double printint(int i) {
+  putchar((char) i);
+  fflush(stdout);
+  return 0;
+}

@@ -44,8 +44,8 @@ processArg (S.TypedName rawType name) = do
   assign name pointer
 
 codegenTop :: S.Expr -> LLVM ()
-codegenTop (S.Function name args body) =
-  define double name fnargs bls
+codegenTop (S.Function typeDecl name args body) =
+  define (S.declToType typeDecl) name fnargs bls
   where
     fnargs = toSig args
     bls = createBlocks $ execCodegen $ do
@@ -58,11 +58,11 @@ codegenTop (S.Extern name args) =
   external double name fnargs
   where fnargs = toDoubleSig args
 
-codegenTop (S.BinaryDef name args body) =
-  codegenTop $ S.Function ("binary" ++ name) args body
+codegenTop (S.BinaryDef typeDecl name args body) =
+  codegenTop $ S.Function typeDecl ("binary" ++ name) args body
 
-codegenTop (S.UnaryDef name arg body) =
-  codegenTop $ S.Function ("unary" ++ name) [arg] body
+codegenTop (S.UnaryDef typeDecl name arg body) =
+  codegenTop $ S.Function typeDecl ("unary" ++ name) [arg] body
 
 codegenTop exp =
   define double "main" [] blks
@@ -96,22 +96,32 @@ intOperand :: Integer -> AST.Operand
 intOperand val = cons $ C.Int 32 $ toInteger val
 
 cgen :: S.Expr -> Codegen AST.Operand
-cgen (S.Var x) = getvar x >>= load
+
+-- Types
 cgen (S.Float n) = return $ cons $ C.Float (F.Double n)
+
 cgen (S.Array elems) = do
   i <- alloca (array (fromIntegral . length $ elems) double)
   let arr = cons $ C.Array double (map (C.Float . F.Double) elems)
   store i arr
   instr doublePtr $ I.GetElementPtr True i [intOperand 0, intOperand 0] []
 
+cgen (S.Integer val) = return $ cons $ C.Int 32 val
+
+-- Memory
+cgen (S.Var x) = getvar x >>= load
+
 cgen (S.ArrAccess var index) = do
   arrOperand <- getvar var
   let indice = cons $ C.Int 32 (toInteger index)
   pointer <- instr double $ I.GetElementPtr True arrOperand [indice] []
   load pointer
+
+-- Allocations
 cgen (S.Call fn args) = do
   largs <- mapM cgen args
   call (externf (AST.Name fn)) largs
+
 cgen (S.If cond tr fl) = do
   ifthen <- addBlock "if.then"
   ifelse <- addBlock "if.else"
@@ -138,6 +148,7 @@ cgen (S.If cond tr fl) = do
   -- if.exit
   setBlock ifexit
   phi double [(trval, ifthen), (flval, ifelse)]
+
 cgen (S.For ivar start cond step body) = do
   forloop <- addBlock "for.loop"
   forexit <- addBlock "for.exit"
@@ -165,8 +176,7 @@ cgen (S.For ivar start cond step body) = do
   -- for.exit
   setBlock forexit
   return zero
-cgen (S.UnaryOp op a) =
-    cgen (S.Call ("unary" ++ op) [a])
+
 cgen (S.Let a b@(S.Array elems) c) = do
   val <- cgen b
   i <- alloca (ptr double)
@@ -174,17 +184,23 @@ cgen (S.Let a b@(S.Array elems) c) = do
   pointer <- load i
   assign a pointer
   cgen c
+
+cgen (S.UnaryOp op a) =
+    cgen (S.Call ("unary" ++ op) [a])
+
 cgen (S.Let a b c) = do
   val <- cgen b
   i <- alloca (oType val)
   store i val
   assign a i
   cgen c
+
 cgen (S.BinaryOp "<-" (S.Var var) val) = do
   a <- getvar var
   cval <- cgen val
   store a cval
   return cval
+
 cgen (S.BinaryOp op a b) =
   case Map.lookup op binops of
     Just f -> do
@@ -192,6 +208,7 @@ cgen (S.BinaryOp op a b) =
       cb <- cgen b
       f ca cb
     Nothing -> cgen (S.Call ("binary" ++ op) [a, b])
+
 cgen other = error $ "Code generation for " ++ show other ++ " is not defined."
 -------------------------------------------------------------------------------
 -- Compilation

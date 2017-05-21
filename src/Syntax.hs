@@ -7,9 +7,11 @@ type Name = String
 
 data PrimType = DoublePrim
               | CharPrim
+              | IntPrim
               deriving (Eq, Ord, Show)
 
 data TypeDecl = DoubleDecl
+              | IntDecl
               | ArrayDecl PrimType
               deriving (Eq, Ord, Show)
 
@@ -17,22 +19,24 @@ data TypedName = TypedName TypeDecl Name deriving (Eq, Ord, Show)
 
 data Expr
   = Float Double
+  | Integer Integer
   | Array [Double]
   | ArrAccess Name Word32
   | Var String
   | Call Name [Expr]
-  | Function Name [TypedName] Expr
+  | Function TypeDecl Name [TypedName] Expr
   | Extern Name [Name]
   | BinaryOp Name Expr Expr
   | UnaryOp Name Expr
   | If Expr Expr Expr
   | For Name Expr Expr Expr Expr
-  | BinaryDef Name [TypedName] Expr
-  | UnaryDef Name TypedName Expr
+  | BinaryDef TypeDecl Name [TypedName] Expr
+  | UnaryDef TypeDecl Name TypedName Expr
   | Let Name Expr Expr
   deriving (Eq, Ord, Show)
 
 declToType :: TypeDecl -> AST.Type
 declToType DoubleDecl = double
+declToType IntDecl = int
 declToType (ArrayDecl DoublePrim) = ptr double
 declToType (ArrayDecl CharPrim) = ptr char

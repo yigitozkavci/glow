@@ -14,7 +14,7 @@ import Data.Word (Word32)
 int :: Parser Expr
 int = do
   n <- integer
-  return $ Float (fromInteger n)
+  return $ Integer n
 
 array :: Parser Expr
 array = do
@@ -73,6 +73,11 @@ doubleDecl = do
   reserved "double"
   return DoubleDecl
 
+intDecl :: Parser TypeDecl
+intDecl = do
+  reserved "int"
+  return IntDecl
+
 doubleArrDecl :: Parser TypeDecl
 doubleArrDecl = do
   reserved "double[]"
@@ -85,6 +90,7 @@ charArrDecl = do
 
 parseTypeDecl :: Parser TypeDecl
 parseTypeDecl = try doubleDecl
+             <|> try intDecl
              <|> doubleArrDecl
 
 typedIdentifier :: Parser TypedName
@@ -97,11 +103,12 @@ typedIdentifier = do
 function :: Parser Expr
 function = do
   reserved "def"
+  typeDecl <- parseTypeDecl
   name <- identifier
   args <- parens $ commaSep typedIdentifier
   reservedOp "="
   body <- expr
-  return $ Function name args body
+  return $ Function typeDecl name args body
 
 extern :: Parser Expr
 extern = do
@@ -162,23 +169,25 @@ defn = try extern
 binaryDef :: Parser Expr
 binaryDef = do
   reserved "def"
+  typeDecl <- parseTypeDecl
   reserved "binary"
   o <- op
   prec <- int
   args <- parens $ commaSep typedIdentifier
   reservedOp "="
   body <- expr
-  return $ BinaryDef o args body
+  return $ BinaryDef typeDecl o args body
 
 unaryDef :: Parser Expr
 unaryDef = do
   reserved "def"
+  typeDecl <- parseTypeDecl
   reserved "unary"
   o <- op
   arg <- parens typedIdentifier
   reservedOp "="
   body <- expr
-  return $ UnaryDef o arg body
+  return $ UnaryDef typeDecl o arg body
 
 contents :: Parser a -> Parser a
 contents p = do

@@ -82,6 +82,9 @@ doublePtr = ptr double
 
 char :: Type
 char = ptr double
+
+int :: Type
+int = IntegerType 32
 -------------------------------------------------------------------------------
 -- Names
 -------------------------------------------------------------------------------
@@ -304,4 +307,5 @@ oType :: Operand -> Type
 oType (LocalReference oType' _) = oType'
 oType (ConstantOperand (C.Float _)) = double
 oType (ConstantOperand (C.Array memType vals)) = array (fromIntegral $ length vals) memType
+oType (ConstantOperand (C.Int _ _)) = int
 oType operand = error $ "Undefined type of operand: " ++ show operand
