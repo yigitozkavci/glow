@@ -25,17 +25,13 @@ array parseElem = do
   whitespace
   char ']'
   whitespace
-  return $ vals
+  return vals
 
 doubleArray :: Parser Expr
-doubleArray = do
-  vals <- array float
-  return $ DoubleArray vals
+doubleArray = DoubleArray <$> array float
 
 intArray :: Parser Expr
-intArray = do
-  vals <- array integer
-  return $ IntArray vals
+intArray = IntArray <$> array integer
 
 arrAccess :: Parser Expr
 arrAccess = do
